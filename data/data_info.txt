@@ -1,0 +1,2 @@
+https://nlp.stanford.edu/projects/glove/
+https://www.kaggle.com/quora/question-pairs-dataset/data
