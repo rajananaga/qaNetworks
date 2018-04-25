@@ -62,7 +62,7 @@ def main():
                            help=("number of epochs with no validation "
                                  "accuracy improvement after which training "
                                  "will be stopped"))
-    argparser.add_argument("--num_sentence_words", type=int, default=30,
+    argparser.add_argument("--num_sentence_words", type=int, default=25,
                            help=("The maximum length of a sentence. Longer "
                                  "sentences will be truncated, and shorter "
                                  "ones will be padded."))

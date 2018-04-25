@@ -319,7 +319,7 @@ class SiameseBiLSTM(BaseTFModel):
         B = tf.tensordot(H, self.multi_ATT1, [[2],[0]])
         B = tf.tanh(B)
         B = tf.tensordot(B, self.multi_ATT2, [[2],[0]])
-        A = tf.nn.softmax(B, axis = 1)
+        A = tf.nn.softmax(B, dim = 1)
         A = tf.transpose(A, [0,2,1])
         return A
 
@@ -329,7 +329,7 @@ class SiameseBiLSTM(BaseTFModel):
         B = tf.tanh(B)
         #  (?, r, 256) * (256, 1) = (?, r, 1)
         B = tf.tensordot(B, self.ATT2, [[2],[0]])
-        A = tf.nn.softmax(B, axis = 1)
+        A = tf.nn.softmax(B, dim = 1)
         return tf.transpose(A, [0,2,1])
 
     def matrix_penalty(self, A):
