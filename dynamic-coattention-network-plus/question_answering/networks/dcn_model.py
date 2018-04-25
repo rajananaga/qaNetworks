@@ -18,7 +18,7 @@ class DCN:
         pretrained_embeddings: Pretrained embeddings.  
         hparams: dictionary of all hyperparameters for models.  
     """
-    def __init__(self, pretrained_embeddings, hparams, use_siamese=False):
+    def __init__(self, pretrained_embeddings, hparams, use_siamese=False, siamese_config):
         self.hparams = copy.copy(hparams)
         self.pretrained_embeddings = pretrained_embeddings
 
@@ -38,13 +38,18 @@ class DCN:
         with tf.variable_scope('embeddings'):
             embedded_vocab = tf.Variable(self.pretrained_embeddings, name='shared_embedding', trainable=hparams['trainable_embeddings'], dtype=tf.float32)  
             if use_siamese:
-                siamese_model = SiameseBiLSTM(vars(config))
+                siamese_model = SiameseBiLSTM(vars(siamese_config))
                 siamese_model.build_graph()
 
                 saver = tf.train.Saver()
-                last_checkpoint = tf.train.latest_checkpoint(model_load_dir)
+                last_checkpoint = tf.train.latest_checkpoint(siamese_config.model_load_dir)
                 saver.restore(sess, last_checkpoint)
-                q_embeddings, _ = siamese_model.process_sentence(self.question)
+                M, _ = siamese_model.process_sentence(self.question)
+
+                # 2u x 300
+                two_u = tf.shape(M)[-1] # embedding dimension of bi-directional siamese network
+                W = tf.get_variable('siamese_to_dcn', shape=[two_u, 300], dtype=tf.float32) # convert this to dcn network size
+                q_embeddings = tf.matmul(M, W)
             else:
                 q_embeddings = tf.nn.embedding_lookup(embedded_vocab, self.question)
             p_embeddings = tf.nn.embedding_lookup(embedded_vocab, self.paragraph)

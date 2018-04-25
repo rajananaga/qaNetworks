@@ -417,7 +417,7 @@ def main(_):
     
     # Build model
     if FLAGS.model in ('baseline', 'mixed', 'dcnplus', 'dcn'):
-        model = DCN(embeddings, FLAGS.__flags, use_siamese=True)
+        model = DCN(embeddings, FLAGS.__flags, use_siamese=True, siamese_config=siamese_config)
     elif FLAGS.model == 'cat':
         from networks.cat import Graph
         model = Graph(embeddings)
