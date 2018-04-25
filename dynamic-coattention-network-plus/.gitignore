@@ -1,0 +1,13 @@
+.vscode
+checkpoints
+log
+train
+download
+other
+data
+*.pyc
+*.bak
+cs224n
+cat.py
+cat_modules.py
+*.zip

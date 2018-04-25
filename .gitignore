@@ -1,5 +1,4 @@
 data/
-dynamic-coattention-network-plus/
 
 # exclude folders/files named data, models or logs in the
 # project root directory, but not anywhere else.
