@@ -1,0 +1,38 @@
+#### ESSENTIAL LIBRARIES FOR MAIN FUNCTIONALITY ####
+
+# Neural network and related libraries
+tensorflow==1.1.0
+numpy
+
+# Progress logger
+tqdm
+
+# Adds an @overrides decorator for better documentation and error checking when using subclasses.
+overrides
+
+# NLP tools
+nltk
+
+# Argument parsing / config
+argparse
+
+# Mainly used for outputting proper csvs easily
+pandas
+
+#### TESTING-RELATED PACKAGES ####
+# Unit tests
+pytest
+
+# Let's pytest find our code
+pytest-pythonpath
+
+# Code style linting
+flake8
+
+# Some things in TF are sometimes non-deterministic, so this reruns flaky tests
+flaky
+
+# coverage reports
+coverage
+codecov
+pytest-cov

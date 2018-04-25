@@ -1,1 +1,11 @@
-Data/
+data/
+dynamic-coattention-network-plus/
+
+# exclude folders/files named data, models or logs in the
+# project root directory, but not anywhere else.
+paraphrase-id-tensorflow-master/data
+!*/data
+paraphrase-id-tensorflow-master/models
+!*/models
+paraphrase-id-tensorflow-master/logs
+!*/logs
