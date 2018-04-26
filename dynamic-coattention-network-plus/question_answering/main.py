@@ -283,8 +283,8 @@ def do_train(model, train, dev):
         start = timer()
         epoch = -1
         for i in itertools.count():
-            fedd_dict_inputs = train.get_batch(FLAGS.batch_size, replace=False)
-            feed_dict = model.fill_feed_dict(*fedd_dict_inputs, is_training=True)
+            feed_dict_inputs = train.get_batch(FLAGS.batch_size, replace=False)
+            feed_dict = model.fill_feed_dict(*feed_dict_inputs, is_training=True)
             if epoch != train.epoch:
                 epoch = train.epoch
                 print(f'Epoch {epoch}')
