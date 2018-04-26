@@ -251,7 +251,7 @@ def multibatch_prediction_truth(session, model, data, num_batches=None, random=F
     return prediction, truth
 
 
-def do_train(model, train, dev):
+def do_train(model, train, dev, input_model = None):
     """ Trains a model
 
     Args:  
@@ -283,8 +283,12 @@ def do_train(model, train, dev):
         start = timer()
         epoch = -1
         for i in itertools.count():
-            fedd_dict_inputs = train.get_batch(FLAGS.batch_size, replace=False)
-            feed_dict = model.fill_feed_dict(*fedd_dict_inputs, is_training=True)
+            feed_dict_inputs = train.get_batch(FLAGS.batch_size, replace=False)
+            question = feed_dict_inputs[0]
+            M = input_model.run(question)
+            input_dict_inputs[0] = M
+
+            feed_dict = model.fill_feed_dict(*feed_dict_inputs, is_training=True)
             if epoch != train.epoch:
                 epoch = train.epoch
                 print(f'Epoch {epoch}')
@@ -440,7 +444,7 @@ def main(_):
     # Build model
     if FLAGS.model in ('baseline', 'mixed', 'dcnplus', 'dcn'):
         # with tf.variable_scope('dcn'):
-        model = DCN(embeddings, FLAGS.__flags, siamese_model = siamese_model)
+        model = DCN(embeddings, FLAGS.__flags)
     elif FLAGS.model == 'cat':
         from networks.cat import Graph
         model = Graph(embeddings)
@@ -450,7 +454,7 @@ def main(_):
     # Run mode
     if FLAGS.mode == 'train':
         save_flags()
-        do_train(model, train, dev)
+        do_train(model, train, dev, input_model = siamese_graph)
     elif FLAGS.mode == 'eval':
         do_eval(model, train, dev)
     elif FLAGS.mode == 'overfit':
