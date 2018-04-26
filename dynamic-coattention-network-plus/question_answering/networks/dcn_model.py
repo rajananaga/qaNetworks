@@ -39,12 +39,14 @@ class DCN:
             embedded_vocab = tf.Variable(self.pretrained_embeddings, name='shared_embedding', trainable=hparams['trainable_embeddings'], dtype=tf.float32)  
             if use_siamese:
                 siamese_model = SiameseBiLSTM(vars(siamese_config))
-                siamese_model.build_graph()
+                siamese_model._create_placeholders()
 
                 saver = tf.train.Saver()
                 last_checkpoint = tf.train.latest_checkpoint(siamese_config.model_load_dir)
                 saver.restore(sess, last_checkpoint)
-                M, _ = siamese_model.process_sentence(self.question)
+
+                feed_dict = {siamese_model.sentence_one: self.question, siamese_model.is_train: False}
+                M, A, _ = sess.run(siamese_model.process_sentence(siamese_model.sentence_one), feed_dict)
 
                 # 2u x 300
                 two_u = tf.shape(M)[-1] # embedding dimension of bi-directional siamese network
