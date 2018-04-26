@@ -88,6 +88,30 @@ class SiameseBiLSTM(BaseTFModel):
         self.ATT1 = tf.get_variable(name = 'w3', shape = (2*self.rnn_hidden_size, self.att_dim))
         self.ATT2 = tf.get_variable(name = 'w4', shape = (self.att_dim, 1))
 
+
+        if self.mode == "train":
+            # Load the word embedding matrix that was passed in
+            # since we are training
+            self.word_emb_mat = tf.get_variable(
+                "word_emb_mat",
+                dtype="float",
+                shape=[self.word_vocab_size,
+                       self.word_embedding_dim],
+                initializer=tf.constant_initializer(
+                    self.word_embedding_matrix),
+                trainable=self.fine_tune_embeddings)
+        else:
+            # We are not training, so a model should have been
+            # loaded with the embedding matrix already there.
+            self.word_emb_mat = tf.get_variable("word_emb_mat",
+                                           shape=[self.word_vocab_size,
+                                                  self.word_embedding_dim],
+                                           dtype="float",
+                                           trainable=self.fine_tune_embeddings)
+
+        self.rnn_cell_fw = LSTMCell(self.rnn_hidden_size, state_is_tuple=True)
+        self.rnn_cell_bw = LSTMCell(self.rnn_hidden_size, state_is_tuple=True)
+
         if config_dict:
             logger.warning("UNUSED VALUES IN CONFIG DICT: {}".format(config_dict))
 
@@ -119,54 +143,28 @@ class SiameseBiLSTM(BaseTFModel):
         # A boolean that encodes whether we are training or evaluating
         self.is_train = tf.placeholder('bool', [], name='is_train')
 
-    def process_sentence(self, sentence):
-        sentence_mask = tf.sign(self.sentence, name="sentence_masking")
+    def process_sentence(self, sentence, scope_name = 'scope'):
+
+        sentence_mask = tf.sign(sentence, name="sentence_masking")
         sentence_len = tf.reduce_sum(sentence_mask, 1)
-        word_vocab_size = self.word_vocab_size
-        word_embedding_dim = self.word_embedding_dim
-        word_embedding_matrix = self.word_embedding_matrix
-        fine_tune_embeddings = self.fine_tune_embeddings
         
-        with tf.variable_scope("embeddings"):
-            with tf.variable_scope("embedding_var"), tf.device("/cpu:0"):
-                if self.mode == "train":
-                    # Load the word embedding matrix that was passed in
-                    # since we are training
-                    word_emb_mat = tf.get_variable(
-                        "word_emb_mat",
-                        dtype="float",
-                        shape=[word_vocab_size,
-                               word_embedding_dim],
-                        initializer=tf.constant_initializer(
-                            word_embedding_matrix),
-                        trainable=fine_tune_embeddings)
-                else:
-                    # We are not training, so a model should have been
-                    # loaded with the embedding matrix already there.
-                    word_emb_mat = tf.get_variable("word_emb_mat",
-                                                   shape=[word_vocab_size,
-                                                          word_embedding_dim],
-                                                   dtype="float",
-                                                   trainable=fine_tune_embeddings)
 
-            with tf.variable_scope("word_embeddings"):
-                # Shape: (batch_size, num_sentence_words, embedding_dim)
-                word_embedded_sentence = tf.nn.embedding_lookup(
-                    word_emb_mat,
-                    self.sentence)
+        
+        with tf.variable_scope("word_embeddings"):
+            # Shape: (batch_size, num_sentence_words, embedding_dim)
+            word_embedded_sentence = tf.nn.embedding_lookup(
+                self.word_emb_mat,
+                sentence)
 
-        rnn_hidden_size = self.rnn_hidden_size
-        rnn_output_mode = self.rnn_output_mode
-        output_keep_prob = self.output_keep_prob
-        rnn_cell_fw = LSTMCell(rnn_hidden_size, state_is_tuple=True)
-        d_rnn_cell_fw = SwitchableDropoutWrapper(rnn_cell_fw,
+        # dropout layers
+        d_rnn_cell_fw = SwitchableDropoutWrapper(self.rnn_cell_fw,
                                                      self.is_train,
-                                                     output_keep_prob=output_keep_prob)
-        rnn_cell_bw = LSTMCell(rnn_hidden_size, state_is_tuple=True)
-        d_rnn_cell_bw_one = SwitchableDropoutWrapper(rnn_cell_bw,
+                                                     output_keep_prob=self.output_keep_prob)
+        d_rnn_cell_bw = SwitchableDropoutWrapper(self.rnn_cell_bw,
                                                      self.is_train,
-                                                     output_keep_prob=output_keep_prob)
+                                                     output_keep_prob=self.output_keep_prob)
 
+        
         with tf.variable_scope("encode_sentences"):
             # Encode the first sentence.
             (fw_output, bw_output), _ = tf.nn.bidirectional_dynamic_rnn(
@@ -193,7 +191,7 @@ class SiameseBiLSTM(BaseTFModel):
 
             #(?, r)*(?, r, 512)
             encoded_sentence = tf.squeeze(tf.matmul(a, M), axis = 1)
-        return M, encoded_sentence
+        return M, A, encoded_sentence
 
     @overrides
     def _build_forward(self):
@@ -201,161 +199,8 @@ class SiameseBiLSTM(BaseTFModel):
         Using the values in the config passed to the SiameseBiLSTM object
         on creation, build the forward pass of the computation graph.
         """
-        # # A mask over the word indices in the sentence, indicating
-        # # which indices are padding and which are words.
-        # # Shape: (batch_size, num_sentence_words)
-        # sentence_one_mask = tf.sign(self.sentence_one,
-        #                             name="sentence_one_masking")
-        # sentence_two_mask = tf.sign(self.sentence_two,
-        #                             name="sentence_two_masking")
-
-        # # The unpadded lengths of sentence one and sentence two
-        # # Shape: (batch_size,)
-        # sentence_one_len = tf.reduce_sum(sentence_one_mask, 1)
-        # sentence_two_len = tf.reduce_sum(sentence_two_mask, 1)
-
-        # word_vocab_size = self.word_vocab_size
-        # word_embedding_dim = self.word_embedding_dim
-        # word_embedding_matrix = self.word_embedding_matrix
-        # fine_tune_embeddings = self.fine_tune_embeddings
-
-        # with tf.variable_scope("embeddings"):
-        #     with tf.variable_scope("embedding_var"), tf.device("/cpu:0"):
-        #         if self.mode == "train":
-        #             # Load the word embedding matrix that was passed in
-        #             # since we are training
-        #             word_emb_mat = tf.get_variable(
-        #                 "word_emb_mat",
-        #                 dtype="float",
-        #                 shape=[word_vocab_size,
-        #                        word_embedding_dim],
-        #                 initializer=tf.constant_initializer(
-        #                     word_embedding_matrix),
-        #                 trainable=fine_tune_embeddings)
-        #         else:
-        #             # We are not training, so a model should have been
-        #             # loaded with the embedding matrix already there.
-        #             word_emb_mat = tf.get_variable("word_emb_mat",
-        #                                            shape=[word_vocab_size,
-        #                                                   word_embedding_dim],
-        #                                            dtype="float",
-        #                                            trainable=fine_tune_embeddings)
-
-        #     with tf.variable_scope("word_embeddings"):
-        #         # Shape: (batch_size, num_sentence_words, embedding_dim)
-        #         word_embedded_sentence_one = tf.nn.embedding_lookup(
-        #             word_emb_mat,
-        #             self.sentence_one)
-        #         # Shape: (batch_size, num_sentence_words, embedding_dim)
-        #         word_embedded_sentence_two = tf.nn.embedding_lookup(
-        #             word_emb_mat,
-        #             self.sentence_two)
-
-        # rnn_hidden_size = self.rnn_hidden_size
-        # rnn_output_mode = self.rnn_output_mode
-        # output_keep_prob = self.output_keep_prob
-        # rnn_cell_fw_one = LSTMCell(rnn_hidden_size, state_is_tuple=True)
-        # d_rnn_cell_fw_one = SwitchableDropoutWrapper(rnn_cell_fw_one,
-        #                                              self.is_train,
-        #                                              output_keep_prob=output_keep_prob)
-        # rnn_cell_bw_one = LSTMCell(rnn_hidden_size, state_is_tuple=True)
-        # d_rnn_cell_bw_one = SwitchableDropoutWrapper(rnn_cell_bw_one,
-        #                                              self.is_train,
-        #                                              output_keep_prob=output_keep_prob)
-        # with tf.variable_scope("encode_sentences"):
-        #     # Encode the first sentence.
-        #     (fw_output_one, bw_output_one), _ = tf.nn.bidirectional_dynamic_rnn(
-        #         cell_fw=d_rnn_cell_fw_one,
-        #         cell_bw=d_rnn_cell_bw_one,
-        #         dtype="float",
-        #         sequence_length=sentence_one_len,
-        #         inputs=word_embedded_sentence_one,
-        #         scope="encoded_sentence_one")
-        #     if self.share_encoder_weights:
-        #         # Encode the second sentence, using the same RNN weights.
-        #         tf.get_variable_scope().reuse_variables()
-        #         (fw_output_two, bw_output_two), _ = tf.nn.bidirectional_dynamic_rnn(
-        #             cell_fw=d_rnn_cell_fw_one,
-        #             cell_bw=d_rnn_cell_bw_one,
-        #             dtype="float",
-        #             sequence_length=sentence_two_len,
-        #             inputs=word_embedded_sentence_two,
-        #             scope="encoded_sentence_one")
-        #     else:
-        #         # Encode the second sentence with a different RNN
-        #         rnn_cell_fw_two = LSTMCell(rnn_hidden_size, state_is_tuple=True)
-        #         d_rnn_cell_fw_two = SwitchableDropoutWrapper(
-        #             rnn_cell_fw_two,
-        #             self.is_train,
-        #             output_keep_prob=output_keep_prob)
-        #         rnn_cell_bw_two = LSTMCell(rnn_hidden_size, state_is_tuple=True)
-        #         d_rnn_cell_bw_two = SwitchableDropoutWrapper(
-        #             rnn_cell_bw_two,
-        #             self.is_train,
-        #             output_keep_prob=output_keep_prob)
-        #         (fw_output_two, bw_output_two), _ = tf.nn.bidirectional_dynamic_rnn(
-        #             cell_fw=d_rnn_cell_fw_two,
-        #             cell_bw=d_rnn_cell_bw_two,
-        #             dtype="float",
-        #             sequence_length=sentence_two_len,
-        #             inputs=word_embedded_sentence_two,
-        #             scope="encoded_sentence_two")
-
-        #     # Now, combine the fw_output and bw_output for the
-        #     # first and second sentence LSTM outputs
-        #     if rnn_output_mode == "last":
-        #         # Get the last unmasked output from the RNN
-        #         last_fw_output_one = last_relevant_output(fw_output_one,
-        #                                                   sentence_one_len)
-        #         last_bw_output_one = last_relevant_output(bw_output_one,
-        #                                                   sentence_one_len)
-        #         last_fw_output_two = last_relevant_output(fw_output_two,
-        #                                                   sentence_two_len)
-        #         last_bw_output_two = last_relevant_output(bw_output_two,
-        #                                                   sentence_two_len)
-        #         # Shape: (batch_size, 2*rnn_hidden_size)
-        #         encoded_sentence_one = tf.concat([last_fw_output_one,
-        #                                           last_bw_output_one], 1)
-        #         encoded_sentence_two = tf.concat([last_fw_output_two,
-        #                                           last_bw_output_two], 1)
-        #     elif rnn_output_mode == 'H':
-        #         #fw_output_one  batch_size X T X d 
-        #         # Shape: (batch_size, 2*rnn_hidden_size)
-
-        #         # ADD POSITIONAL ENCODING?
-
-
-        #         H1 = tf.concat([fw_output_one, bw_output_one], -1)
-        #         H2 = tf.concat([fw_output_two, bw_output_two], -1)
-        #         # H1.shape = (?, ?, 512)
-
-        #         A1 = self.multi_attention(H1)
-        #         A2 = self.multi_attention(H2)
-        #         # (batch, r, T) *  (batch, T, d) = (batch, r, d)
-
-        #         #(?, r, 512)
-        #         M1 = tf.matmul(A1,H1)
-        #         M2 = tf.matmul(A2,H2)
-
-        #         # ADD POSITIONAL ENCODING?
-
-        #         # a1 = (?, r)
-        #         a1 = self.reg_attention(M1)
-        #         a2 = self.reg_attention(M2)
-
-        #         #(?, r)*(?, r, 512)
-        #         encoded_sentence_one = tf.squeeze(tf.matmul(a1, M1), axis = 1)
-        #         encoded_sentence_two = tf.squeeze(tf.matmul(a2, M2), axis = 1)
-
-
-        #     else:
-        #         raise ValueError("Got an unexpected value {} for "
-        #                          "rnn_output_mode, expected one of "
-        #                          "[mean_pool, last]")
-        with tf.name_scope('sentence_one'):
-            M1, encoded_sentence_one = process_sentence(self.sentence_one)
-        with tf.name_scope('sentence_two'):
-            M2, encoded_sentence_two = process_sentence(self.sentence_two)
+        M1, A1, encoded_sentence_one = self.process_sentence(self.sentence_one, scope_name = 'sentence_one')
+        M2, A2, encoded_sentence_two = self.process_sentence(self.sentence_two, scope_name = 'sentence_two')
 
         with tf.name_scope("loss"):
             # Use the exponential of the negative L1 distance
@@ -370,6 +215,7 @@ class SiameseBiLSTM(BaseTFModel):
                 -tf.reduce_sum(tf.cast(self.y_true, "float") *
                                tf.log(self.y_pred),
                                axis=1))
+
             self.loss = self.loss + self.matrix_penalty(A1) + self.matrix_penalty(A2) #add matrix penalty
 
         with tf.name_scope("accuracy"):
