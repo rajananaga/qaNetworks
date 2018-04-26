@@ -6,6 +6,11 @@ from datetime import datetime
 from timeit import default_timer as timer
 from os.path import join as pjoin
 
+import json
+import sys
+sys.path.append('../../paraphrase-id-tensorflow-master/duplicate_questions/models/siamese_bilstm/')
+from siamese_bilstm import SiameseBiLSTM
+
 import tensorflow as tf
 import numpy as np
 
@@ -19,6 +24,8 @@ logging.basicConfig(level=logging.INFO)
 
 # Mode
 tf.app.flags.DEFINE_string('mode', 'train', 'Mode to use, train/eval/shell/overfit')
+tf.app.flags.DEFINE_string('siamese_model_num', '00', 'Path to config log for siamese network')
+tf.app.flags.DEFINE_string('use_siamese', True, 'Path to config log for siamese network')
 
 # Training hyperparameters
 tf.app.flags.DEFINE_integer("max_steps", 50000, "Steps until training loop stops.")
@@ -268,8 +275,22 @@ def do_train(model, train, dev):
     with tf.Session(config=config) as sess:
         sess.run(init)
         latest_ckpt = tf.train.latest_checkpoint(checkpoint_dir)
-        if latest_ckpt:
+        if latest_ckpt and model.siamese_model:
             saver.restore(sess, latest_ckpt)
+        else:
+            # load in siamese model weights
+            # siamese_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, "siamese")
+            siamese_vars = model.siamese_model.var_list
+            print('vars', siamese_vars)
+            siamese_saver = tf.train.Saver(var_list = siamese_vars)
+            checkpoint_dir = '../../paraphrase-id-tensorflow-master/models/baseline_siamese/{}/'.format(FLAGS.siamese_model_num)
+
+            from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
+            print_tensors_in_checkpoint_file(file_name=checkpoint_dir, tensor_name='')
+            sys.exit()
+
+            latest_ckpt = tf.train.latest_checkpoint(checkpoint_dir)
+            siamese_saver.restore(sess, latest_ckpt)
         start = timer()
         epoch = -1
         for i in itertools.count():
@@ -285,7 +306,8 @@ def do_train(model, train, dev):
             }
             if i > 0 and (step+1) % 20 == 0:
                 fetch_dict['summary'] = summary
-            result = sess.run(fetch_dict, feed_dict)
+            dcn_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "dcn/")
+            result = sess.run(fetch_dict, feed_dict, var_list = dcn_vars)
             step = result['step']
             if 'summary' in result:
                 summary_writer.add_summary(result['summary'], step)
@@ -414,10 +436,22 @@ def main(_):
     # Load embeddings
     embed_path = FLAGS.embed_path or pjoin(FLAGS.data_dir, "glove.trimmed.{}.npz".format(FLAGS.embedding_size))
     embeddings = np.load(embed_path)['glove']  # 115373
+
+    if FLAGS.use_siamese:
+        # get config file for siamese model
+        siamese_config = '../../paraphrase-id-tensorflow-master/logs/baseline_siamese/{}/trainparams.json'.format(FLAGS.siamese_model_num)
+        with open(siamese_config, 'r') as f:
+            siamese_config = json.load(f)
+            siamese_config['mode'] = 'test'
+
+        # with tf.variable_scope('siamese'):
+        siamese_model = SiameseBiLSTM(siamese_config)
+        siamese_model._create_placeholders()
     
     # Build model
     if FLAGS.model in ('baseline', 'mixed', 'dcnplus', 'dcn'):
-        model = DCN(embeddings, FLAGS.__flags, use_siamese=True, siamese_config=siamese_config)
+        # with tf.variable_scope('dcn'):
+        model = DCN(embeddings, FLAGS.__flags, siamese_model = siamese_model)
     elif FLAGS.model == 'cat':
         from networks.cat import Graph
         model = Graph(embeddings)

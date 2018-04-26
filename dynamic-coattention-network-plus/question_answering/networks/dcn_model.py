@@ -2,6 +2,8 @@ import copy
 
 import tensorflow as tf
 
+
+
 from networks.modules import maybe_dropout, max_product_span, naive_decode, cell_factory, char_cnn_word_vectors, _maybe_mask_to_start
 from networks.dcn_plus import baseline_encode, dcn_encode, dcnplus_encode, dcn_decode, dcn_loss
 from tensorflow.contrib.seq2seq.python.ops.attention_wrapper import _maybe_mask_score
@@ -18,7 +20,7 @@ class DCN:
         pretrained_embeddings: Pretrained embeddings.  
         hparams: dictionary of all hyperparameters for models.  
     """
-    def __init__(self, pretrained_embeddings, hparams, use_siamese=False, siamese_config):
+    def __init__(self, pretrained_embeddings, hparams, siamese_model = None):
         self.hparams = copy.copy(hparams)
         self.pretrained_embeddings = pretrained_embeddings
 
@@ -30,27 +32,17 @@ class DCN:
         self.answer_span = tf.placeholder(tf.int32, (None, 2), name='answer_span')
         self.is_training = tf.placeholder(tf.bool, shape=(), name='is_training')   # replace with tf.placeholder_with_default
 
-        # if use_siamese=
-        # with tf.variable_scope('siamese'):
-
+        self.siamese_model = siamese_model
 
         # Word embeddings
         with tf.variable_scope('embeddings'):
             embedded_vocab = tf.Variable(self.pretrained_embeddings, name='shared_embedding', trainable=hparams['trainable_embeddings'], dtype=tf.float32)  
-            if use_siamese:
-                siamese_model = SiameseBiLSTM(vars(siamese_config))
-                siamese_model._create_placeholders()
-
-                saver = tf.train.Saver()
-                last_checkpoint = tf.train.latest_checkpoint(siamese_config.model_load_dir)
-                saver.restore(sess, last_checkpoint)
-
-                feed_dict = {siamese_model.sentence_one: self.question, siamese_model.is_train: False}
-                M, A, _ = sess.run(siamese_model.process_sentence(siamese_model.sentence_one), feed_dict)
+            if self.siamese_model:
+                M, _, _ = siamese_model.process_sentence(self.question)
 
                 # 2u x 300
-                two_u = tf.shape(M)[-1] # embedding dimension of bi-directional siamese network
-                W = tf.get_variable('siamese_to_dcn', shape=[two_u, 300], dtype=tf.float32) # convert this to dcn network size
+                two_u = M.get_shape().as_list()[-1] # embedding dimension of bi-directional siamese network
+                W = tf.get_variable('siamese_to_dcn', shape=[1, two_u, self.hparams['embedding_size']], dtype=tf.float32) # convert this to dcn network size
                 q_embeddings = tf.matmul(M, W)
             else:
                 q_embeddings = tf.nn.embedding_lookup(embedded_vocab, self.question)
@@ -150,6 +142,9 @@ class DCN:
             self.paragraph_length: paragraph_length,
             self.is_training: is_training
         }
+
+        if self.siamese_model:
+            feed_dict[self.siamese_model.is_train] = False
 
         if answer_span is not None:
             feed_dict[self.answer_span] = answer_span

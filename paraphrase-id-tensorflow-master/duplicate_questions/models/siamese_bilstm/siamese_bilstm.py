@@ -5,10 +5,12 @@ import tensorflow as tf
 print("Tensorflow Version ----------> ", tf.__version__)
 from tensorflow.contrib.rnn import LSTMCell
 
-from ..base_tf_model import BaseTFModel
-from ...util.switchable_dropout_wrapper import SwitchableDropoutWrapper
-from ...util.pooling import mean_pool
-from ...util.rnn import last_relevant_output
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
+from models.base_tf_model import BaseTFModel
+from util.switchable_dropout_wrapper import SwitchableDropoutWrapper
+from util.pooling import mean_pool
+from util.rnn import last_relevant_output
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +83,13 @@ class SiameseBiLSTM(BaseTFModel):
         self.num_sentence_words = config_dict.pop("num_sentence_words")
         self.att_dim = self.rnn_hidden_size#config_dict.pop("att_dim")
 
+        trainable = self.mode == 'train'
 
-        self.multi_ATT1 = tf.get_variable(name = 'w1', shape = (2*self.rnn_hidden_size, self.att_dim))
-        self.multi_ATT2 = tf.get_variable(name = 'w2', shape = (self.att_dim, self.num_sentence_words))
+        self.multi_ATT1 = tf.get_variable(name = 'w1', shape = (2*self.rnn_hidden_size, self.att_dim), trainable = trainable)
+        self.multi_ATT2 = tf.get_variable(name = 'w2', shape = (self.att_dim, self.num_sentence_words), trainable = trainable)
 
-        self.ATT1 = tf.get_variable(name = 'w3', shape = (2*self.rnn_hidden_size, self.att_dim))
-        self.ATT2 = tf.get_variable(name = 'w4', shape = (self.att_dim, 1))
+        self.ATT1 = tf.get_variable(name = 'w3', shape = (2*self.rnn_hidden_size, self.att_dim), trainable = trainable)
+        self.ATT2 = tf.get_variable(name = 'w4', shape = (self.att_dim, 1), trainable = trainable)
 
 
         if self.mode == "train":
@@ -114,6 +117,13 @@ class SiameseBiLSTM(BaseTFModel):
 
         if config_dict:
             logger.warning("UNUSED VALUES IN CONFIG DICT: {}".format(config_dict))
+
+    @property
+    def var_list(self):
+        var_list = [self.multi_ATT1, self.multi_ATT2, self.word_emb_mat]
+        var_list.extend(self.rnn_cell_fw.variables)
+        var_list.extend(self.rnn_cell_bw.variables)
+        return var_list
 
     @overrides
     def _create_placeholders(self):
