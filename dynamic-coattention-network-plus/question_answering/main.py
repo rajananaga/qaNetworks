@@ -9,7 +9,8 @@ from os.path import join as pjoin
 import json
 import sys
 sys.path.append('../../paraphrase-id-tensorflow-master/duplicate_questions/models/siamese_bilstm/')
-from siamese_bilstm import SiameseBiLSTM
+#from siamese_bilstm import SiameseBiLSTM
+from import_graph import ImportGraph
 
 import tensorflow as tf
 import numpy as np
@@ -272,29 +273,18 @@ def do_train(model, train, dev):
     # Training session  
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
+
+
+
     with tf.Session(config=config) as sess:
         sess.run(init)
         latest_ckpt = tf.train.latest_checkpoint(checkpoint_dir)
-        if latest_ckpt and model.siamese_model:
-            saver.restore(sess, latest_ckpt)
-        else:
-            # load in siamese model weights
-            # siamese_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, "siamese")
-            siamese_vars = model.siamese_model.var_list
-            print('vars', siamese_vars)
-            siamese_saver = tf.train.Saver(var_list = siamese_vars)
-            checkpoint_dir = '../../paraphrase-id-tensorflow-master/models/baseline_siamese/{}/'.format(FLAGS.siamese_model_num)
-
-            from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
-            print_tensors_in_checkpoint_file(file_name=checkpoint_dir, tensor_name='')
-            sys.exit()
-
-            latest_ckpt = tf.train.latest_checkpoint(checkpoint_dir)
-            siamese_saver.restore(sess, latest_ckpt)
+        saver.restore(sess, latest_ckpt)
         start = timer()
         epoch = -1
         for i in itertools.count():
-            feed_dict = model.fill_feed_dict(*train.get_batch(FLAGS.batch_size, replace=False), is_training=True)
+            fedd_dict_inputs = train.get_batch(FLAGS.batch_size, replace=False)
+            feed_dict = model.fill_feed_dict(*fedd_dict_inputs, is_training=True)
             if epoch != train.epoch:
                 epoch = train.epoch
                 print(f'Epoch {epoch}')
@@ -306,8 +296,7 @@ def do_train(model, train, dev):
             }
             if i > 0 and (step+1) % 20 == 0:
                 fetch_dict['summary'] = summary
-            dcn_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "dcn/")
-            result = sess.run(fetch_dict, feed_dict, var_list = dcn_vars)
+            result = sess.run(fetch_dict, feed_dict)
             step = result['step']
             if 'summary' in result:
                 summary_writer.add_summary(result['summary'], step)
@@ -444,9 +433,9 @@ def main(_):
             siamese_config = json.load(f)
             siamese_config['mode'] = 'test'
 
-        # with tf.variable_scope('siamese'):
-        siamese_model = SiameseBiLSTM(siamese_config)
-        siamese_model._create_placeholders()
+        checkpoint_dir = '../../paraphrase-id-tensorflow-master/models/baseline_siamese/{}/'.format(FLAGS.siamese_model_num)
+        siamese_graph = ImportGraph(checkpoint_dir)
+
     
     # Build model
     if FLAGS.model in ('baseline', 'mixed', 'dcnplus', 'dcn'):

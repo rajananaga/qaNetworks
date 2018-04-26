@@ -4,8 +4,11 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
+from ..data.data_manager import DataManager
+'''
 import sys, os
 from data.data_manager import DataManager
+'''
 
 logger = logging.getLogger(__name__)
 

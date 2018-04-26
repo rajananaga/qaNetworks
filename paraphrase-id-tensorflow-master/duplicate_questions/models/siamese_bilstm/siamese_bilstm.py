@@ -5,12 +5,18 @@ import tensorflow as tf
 print("Tensorflow Version ----------> ", tf.__version__)
 from tensorflow.contrib.rnn import LSTMCell
 
+from ..base_tf_model import BaseTFModel
+from ...util.switchable_dropout_wrapper import SwitchableDropoutWrapper
+from ...util.pooling import mean_pool
+from ...util.rnn import last_relevant_output
+'''
 import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
 from models.base_tf_model import BaseTFModel
 from util.switchable_dropout_wrapper import SwitchableDropoutWrapper
 from util.pooling import mean_pool
 from util.rnn import last_relevant_output
+'''
 
 logger = logging.getLogger(__name__)
 
@@ -158,8 +164,6 @@ class SiameseBiLSTM(BaseTFModel):
         sentence_mask = tf.sign(sentence, name="sentence_masking")
         sentence_len = tf.reduce_sum(sentence_mask, 1)
         
-
-        
         with tf.variable_scope("word_embeddings"):
             # Shape: (batch_size, num_sentence_words, embedding_dim)
             word_embedded_sentence = tf.nn.embedding_lookup(
@@ -174,33 +178,33 @@ class SiameseBiLSTM(BaseTFModel):
                                                      self.is_train,
                                                      output_keep_prob=self.output_keep_prob)
 
-        
-        with tf.variable_scope("encode_sentences"):
-            # Encode the first sentence.
-            (fw_output, bw_output), _ = tf.nn.bidirectional_dynamic_rnn(
-                cell_fw=d_rnn_cell_fw,
-                cell_bw=d_rnn_cell_bw,
-                dtype="float",
-                sequence_length=sentence_len,
-                inputs=word_embedded_sentence,
-                scope="encoded_sentence")
+        with tf.variable_scope(scope_name):
+            with tf.variable_scope("encode_sentences"):
+                # Encode the first sentence.
+                (fw_output, bw_output), _ = tf.nn.bidirectional_dynamic_rnn(
+                    cell_fw=d_rnn_cell_fw,
+                    cell_bw=d_rnn_cell_bw,
+                    dtype="float",
+                    sequence_length=sentence_len,
+                    inputs=word_embedded_sentence,
+                    scope="encoded_sentence")
 
-            H = tf.concat([fw_output, bw_output], -1)
-            # H1.shape = (?, ?, 512)
+                H = tf.concat([fw_output, bw_output], -1)
+                # H1.shape = (?, ?, 512)
 
-            A = self.multi_attention(H)
-            # (batch, r, T) *  (batch, T, d) = (batch, r, d)
+                A = self.multi_attention(H)
+                # (batch, r, T) *  (batch, T, d) = (batch, r, d)
 
-            #(?, r, 512)
-            M = tf.matmul(A,H)
+                #(?, r, 512)
+                M = tf.matmul(A,H, name = 'M')
 
-            # ADD POSITIONAL ENCODING?
+                # ADD POSITIONAL ENCODING?
 
-            # a1 = (?, r)
-            a = self.reg_attention(M)
+                # a1 = (?, r)
+                a = self.reg_attention(M)
 
-            #(?, r)*(?, r, 512)
-            encoded_sentence = tf.squeeze(tf.matmul(a, M), axis = 1)
+                #(?, r)*(?, r, 512)
+                encoded_sentence = tf.squeeze(tf.matmul(a, M), axis = 1)
         return M, A, encoded_sentence
 
     @overrides
