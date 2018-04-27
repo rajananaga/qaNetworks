@@ -405,3 +405,34 @@ class SiameseBiLSTM(BaseTFModel):
                                                       axis=1,
                                                       keep_dims=True)
             return safe_class_probabilities
+
+    def _triplet_similarity(self, anchor_sentence, positive_sentence, negative_sentence, alpha=0.4):
+        """
+        Given a triplet of encoded sentences (vectors), return the contrastive loss computed
+        over the three inputs.
+
+        Parameters
+        ----------
+        anchor_sentence: Tensor
+            A tensor of shape (batch_size, 2*rnn_hidden_size) representing
+            the encoded anchor sentences to use in the loss calculation.
+
+        positive_sentence: Tensor
+            A tensor of shape (batch_size, 2*rnn_hidden_size) representing
+            the encoded positive sentences to use in the loss calculation.
+
+        negative_sentence: Tensor
+            A tensor of shape (batch_size, 2*rnn_hidden_size) representing
+            the encoded negative sentences to use in the loss calculation.
+
+
+        Returns
+        -------
+        loss: float
+            A real number representing the contrastive loss
+        """
+        positive_distance = tf.reduce_sum(tf.square(anchor_sentence - positive_sentence), axis=1)
+        negative_distance = tf.reduce_sum(tf.square(anchor_sentence - negative_sentence), axis=1)
+        loss = tf.maximum(positive_distance - negative_distance + alpha)
+        return loss
+        
