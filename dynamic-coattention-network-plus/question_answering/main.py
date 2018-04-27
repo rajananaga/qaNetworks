@@ -284,10 +284,13 @@ def do_train(model, train, dev, input_model = None):
         epoch = -1
         for i in itertools.count():
             feed_dict_inputs = train.get_batch(FLAGS.batch_size, replace=False)
+<<<<<<< HEAD
             question = feed_dict_inputs[0]
             M = input_model.run(question)
             input_dict_inputs[0] = M
 
+=======
+>>>>>>> 70b2206a145450594826696072b1a9af10ac1289
             feed_dict = model.fill_feed_dict(*feed_dict_inputs, is_training=True)
             if epoch != train.epoch:
                 epoch = train.epoch
