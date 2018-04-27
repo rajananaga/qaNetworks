@@ -7,10 +7,9 @@ from timeit import default_timer as timer
 from os.path import join as pjoin
 
 import json
-import sys
-sys.path.append('../../paraphrase-id-tensorflow-master/duplicate_questions/models/siamese_bilstm/')
+#import sys
+#sys.path.append('../../paraphrase-id-tensorflow-master/models/siamese_bilstm/')
 #from siamese_bilstm import SiameseBiLSTM
-from import_graph import ImportGraph
 
 import tensorflow as tf
 import numpy as np
@@ -279,17 +278,19 @@ def do_train(model, train, dev, input_model = None):
     with tf.Session(config=config) as sess:
         sess.run(init)
         latest_ckpt = tf.train.latest_checkpoint(checkpoint_dir)
-        saver.restore(sess, latest_ckpt)
+        if latest_ckpt:
+            saver.restore(sess, latest_ckpt)
         start = timer()
         epoch = -1
         for i in itertools.count():
             feed_dict_inputs = train.get_batch(FLAGS.batch_size, replace=False)
-
-            question = feed_dict_inputs[0]
-            M = input_model.run(question)
-            input_dict_inputs[0] = M
-
+            if input_model:
+                #feed into siamese model instead
+                # question = feed_dict_inputs[0]
+                M = input_model.run(question)
+                feed_dict_inputs[0] = M
             feed_dict = model.fill_feed_dict(*feed_dict_inputs, is_training=True)
+
             if epoch != train.epoch:
                 epoch = train.epoch
                 print(f'Epoch {epoch}')
@@ -376,7 +377,14 @@ def test_overfit(model, train):
         for epoch in range(epochs):
             epoch_start = timer()
             for step in range(steps_per_epoch):
-                feed_dict = model.fill_feed_dict(*train[:test_size], is_training=True)
+                feed_dict_inputs = train.get_batch(FLAGS.batch_size, replace=False)
+                if input_model:
+                    #feed into siamese model instead
+                    question = feed_dict_inputs[0]
+                    M = input_model.run(question)
+                    input_dict_inputs[0] = M
+                feed_dict = model.fill_feed_dict(*feed_dict_inputs, is_training=True)
+
                 fetch_dict = {
                     'step': tf.train.get_global_step(),
                     'loss': model.loss,
@@ -445,7 +453,7 @@ def main(_):
     # Build model
     if FLAGS.model in ('baseline', 'mixed', 'dcnplus', 'dcn'):
         # with tf.variable_scope('dcn'):
-        model = DCN(embeddings, FLAGS.__flags)
+        model = DCN(embeddings, FLAGS.__flags, siamese_output_dim = siamese_config['rnn_hidden_size'])
     elif FLAGS.model == 'cat':
         from networks.cat import Graph
         model = Graph(embeddings)
@@ -464,6 +472,25 @@ def main(_):
         do_shell(model, dev)
     else:
         raise ValueError(f'Incorrect mode entered, {FLAGS.mode}')
+
+class ImportGraph():
+    """  Importing and running isolated TF graph """
+    def __init__(self, loc):
+        # Create local graph and use it in the session
+        self.graph = tf.Graph()
+        self.sess = tf.Session(graph=self.graph)
+        with self.graph.as_default():
+            latest_ckpt = tf.train.latest_checkpoint(loc)
+            # Import saved model from location 'loc' into local graph
+            saver = tf.train.import_meta_graph(latest_ckpt + '.meta', clear_devices=True)
+            saver.restore(self.sess, loc)
+            # There are TWO options how to get activation operation:
+              # FROM SAVED COLLECTION:            
+            self.M = self.graph.get_tensor_by_name('sentence_one/encode_sentences/M')
+
+    def run(self, question):
+        """ Running the activation operation previously imported """
+        return self.sess.run(self.M, feed_dict={"sentence_one:0": question, 'is_train:0': False})
 
 
 if __name__ == "__main__":

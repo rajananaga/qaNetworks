@@ -85,7 +85,7 @@ class SquadDataset:
             paragraphs, paragraph_lengths = pad_sequences(self.paragraph[arg], self.max_paragraph_length)
             answers = self.answer[arg]
 
-        return (questions, paragraphs, question_lengths, paragraph_lengths, answers)
+        return [questions, paragraphs, question_lengths, paragraph_lengths, answers]
 
 
     @staticmethod

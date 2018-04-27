@@ -20,7 +20,7 @@ class DCN:
         pretrained_embeddings: Pretrained embeddings.  
         hparams: dictionary of all hyperparameters for models.  
     """
-    def __init__(self, pretrained_embeddings, hparams, siamese_model = None):
+    def __init__(self, pretrained_embeddings, hparams, siamese_output_dim = None):
         self.hparams = copy.copy(hparams)
         self.pretrained_embeddings = pretrained_embeddings
 
@@ -32,18 +32,17 @@ class DCN:
         self.answer_span = tf.placeholder(tf.int32, (None, 2), name='answer_span')
         self.is_training = tf.placeholder(tf.bool, shape=(), name='is_training')   # replace with tf.placeholder_with_default
 
-        self.siamese_model = siamese_model
+        self.use_siamese = siamese_output_dim
 
         # Word embeddings
         with tf.variable_scope('embeddings'):
             embedded_vocab = tf.Variable(self.pretrained_embeddings, name='shared_embedding', trainable=hparams['trainable_embeddings'], dtype=tf.float32)  
-            if self.siamese_model:
-                M, _, _ = siamese_model.process_sentence(self.question)
-
+            if self.use_siamese:
                 # 2u x 300
-                two_u = M.get_shape().as_list()[-1] # embedding dimension of bi-directional siamese network
+                two_u = 2*siamese_output_dim # embedding dimension of bi-directional siamese network
+                self.M = tf.placeholder(tf.float32, (None, None, two_u), name='M')
                 W = tf.get_variable('siamese_to_dcn', shape=[1, two_u, self.hparams['embedding_size']], dtype=tf.float32) # convert this to dcn network size
-                q_embeddings = tf.matmul(M, W)
+                q_embeddings = tf.matmul(self.M, W)
             else:
                 q_embeddings = tf.nn.embedding_lookup(embedded_vocab, self.question)
             p_embeddings = tf.nn.embedding_lookup(embedded_vocab, self.paragraph)
@@ -136,15 +135,17 @@ class DCN:
 
     def fill_feed_dict(self, question, paragraph, question_length, paragraph_length, answer_span=None, is_training=False):
         feed_dict = {
-            self.question: question,
             self.paragraph: paragraph,
             self.question_length: question_length, 
             self.paragraph_length: paragraph_length,
             self.is_training: is_training
         }
 
-        if self.siamese_model:
+        if self.use_siamese:
             feed_dict[self.siamese_model.is_train] = False
+            feed_dict[self.M] = question
+        else:
+            feed_dict[self.question] = question
 
         if answer_span is not None:
             feed_dict[self.answer_span] = answer_span
