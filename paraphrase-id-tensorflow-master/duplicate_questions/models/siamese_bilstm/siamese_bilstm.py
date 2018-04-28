@@ -178,33 +178,33 @@ class SiameseBiLSTM(BaseTFModel):
                                                      self.is_train,
                                                      output_keep_prob=self.output_keep_prob)
 
-        with tf.variable_scope(scope_name):
-            with tf.variable_scope("encode_sentences"):
+        #with tf.variable_scope(scope_name):
+            #with tf.variable_scope("encode_sentences"):
                 # Encode the first sentence.
-                (fw_output, bw_output), _ = tf.nn.bidirectional_dynamic_rnn(
-                    cell_fw=d_rnn_cell_fw,
-                    cell_bw=d_rnn_cell_bw,
-                    dtype="float",
-                    sequence_length=sentence_len,
-                    inputs=word_embedded_sentence,
-                    scope="encoded_sentence")
+        (fw_output, bw_output), _ = tf.nn.bidirectional_dynamic_rnn(
+            cell_fw=d_rnn_cell_fw,
+            cell_bw=d_rnn_cell_bw,
+            dtype="float",
+            sequence_length=sentence_len,
+            inputs=word_embedded_sentence,
+            scope="encoded_sentence")
 
-                H = tf.concat([fw_output, bw_output], -1)
-                # H1.shape = (?, ?, 512)
+        H = tf.concat([fw_output, bw_output], -1)
+        # H1.shape = (?, ?, 512)
 
-                A = self.multi_attention(H)
-                # (batch, r, T) *  (batch, T, d) = (batch, r, d)
+        A = self.multi_attention(H)
+        # (batch, r, T) *  (batch, T, d) = (batch, r, d)
 
-                #(?, r, 512)
-                M = tf.matmul(A,H, name = 'M')
+        #(?, r, 512)
+        M = tf.matmul(A, H, name = scope_name + '/' + 'M')
 
-                # ADD POSITIONAL ENCODING?
+        # ADD POSITIONAL ENCODING?
 
-                # a1 = (?, r)
-                a = self.reg_attention(M)
+        # a1 = (?, r)
+        a = self.reg_attention(M)
 
-                #(?, r)*(?, r, 512)
-                encoded_sentence = tf.squeeze(tf.matmul(a, M), axis = 1)
+        #(?, r)*(?, r, 512)
+        encoded_sentence = tf.squeeze(tf.matmul(a, M), axis = 1)
         return M, A, encoded_sentence
 
     @overrides

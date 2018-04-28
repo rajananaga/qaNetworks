@@ -286,7 +286,7 @@ def do_train(model, train, dev, input_model = None):
             feed_dict_inputs = train.get_batch(FLAGS.batch_size, replace=False)
             if input_model:
                 #feed into siamese model instead
-                # question = feed_dict_inputs[0]
+                question = feed_dict_inputs[0]
                 M = input_model.run(question)
                 feed_dict_inputs[0] = M
             feed_dict = model.fill_feed_dict(*feed_dict_inputs, is_training=True)
@@ -477,20 +477,27 @@ class ImportGraph():
     """  Importing and running isolated TF graph """
     def __init__(self, loc):
         # Create local graph and use it in the session
-        self.graph = tf.Graph()
-        self.sess = tf.Session(graph=self.graph)
-        with self.graph.as_default():
+        graph = tf.Graph()
+        self.sess = tf.Session(graph = graph)
+        with graph.as_default():
             latest_ckpt = tf.train.latest_checkpoint(loc)
+            print(latest_ckpt)
             # Import saved model from location 'loc' into local graph
-            saver = tf.train.import_meta_graph(latest_ckpt + '.meta', clear_devices=True)
-            saver.restore(self.sess, loc)
-            # There are TWO options how to get activation operation:
-              # FROM SAVED COLLECTION:            
-            self.M = self.graph.get_tensor_by_name('sentence_one/encode_sentences/M')
+            self.saver = tf.train.import_meta_graph(latest_ckpt + '.meta', clear_devices=True)
+            self.saver.restore(self.sess, latest_ckpt)
+            self.M = self.sess.graph.get_operation_by_name('sentence_one/M')
 
     def run(self, question):
         """ Running the activation operation previously imported """
+        print(question)
+        print(self.sess.graph.get_tensor_by_name('word_emb_mat:0'))
         return self.sess.run(self.M, feed_dict={"sentence_one:0": question, 'is_train:0': False})
+
+
+
+
+
+
 
 
 if __name__ == "__main__":
