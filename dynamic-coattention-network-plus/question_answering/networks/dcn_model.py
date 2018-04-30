@@ -142,7 +142,6 @@ class DCN:
         }
 
         if self.use_siamese:
-            feed_dict[self.siamese_model.is_train] = False
             feed_dict[self.M] = question
         else:
             feed_dict[self.question] = question

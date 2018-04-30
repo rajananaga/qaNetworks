@@ -104,7 +104,7 @@ def reverse_indices(indices, rev_vocab):
     return ' '.join([rev_vocab[idx] for idx in indices if idx != PAD_ID])
 
 
-def do_shell(model, dev):
+def do_shell(model, dev, input_model = None):
     """ Interactive shell
 
     Type a question, write next for the next paragraph or enter a blank for another human's question.  
@@ -146,7 +146,11 @@ def do_shell(model, dev):
                     question_words = reverse_indices(original_question[0], rev_vocab)
                     questions = original_question
                     print(question_words)
-                
+
+                if input_model:
+                    #feed into siamese model instead
+                    question = feed_dict_inputs[0]
+                    question = input_model.run(question)
                 feed_dict = model.fill_feed_dict(questions, paragraphs, question_lengths, paragraph_lengths)
                 
                 if False: #load_meta
@@ -176,7 +180,7 @@ def parameter_space_size():
         logging.info(f'Variable {v} has {v.get_shape().num_elements()} entries')
 
 
-def do_eval(model, train, dev):
+def do_eval(model, train, dev, input_model = None):
     """ Evaluates a model on training and development set
 
     Args:  
@@ -197,11 +201,11 @@ def do_eval(model, train, dev):
         # Train/Dev Evaluation
         start_evaluate = timer()
         
-        prediction, truth = multibatch_prediction_truth(session, model, train, FLAGS.eval_batches)
+        prediction, truth = multibatch_prediction_truth(session, model, train, FLAGS.eval_batches, input_model = input_model)
         train_f1 = f1(prediction, truth)
         train_em = exact_match(prediction, truth)
 
-        prediction, truth = multibatch_prediction_truth(session, model, dev, FLAGS.eval_batches)
+        prediction, truth = multibatch_prediction_truth(session, model, dev, FLAGS.eval_batches, input_model = input_model)
         dev_f1 = f1(prediction, truth)
         dev_em = exact_match(prediction, truth)
 
@@ -210,7 +214,7 @@ def do_eval(model, train, dev):
         logging.info(f'Time to evaluate: {timer() - start_evaluate:.1f} sec')
 
 
-def multibatch_prediction_truth(session, model, data, num_batches=None, random=False):
+def multibatch_prediction_truth(session, model, data, num_batches=None, random=False, input_model = None):
     """ Returns batches of predictions and ground truth answers.
 
     Args:  
@@ -233,11 +237,18 @@ def multibatch_prediction_truth(session, model, data, num_batches=None, random=F
     end = []
     for i in range(num_batches):
         if random:
-            q, p, ql, pl, a = data.get_batch(FLAGS.batch_size)
+            feed_dict_inputs = data.get_batch(FLAGS.batch_size)
         else:
             begin_idx = i * FLAGS.batch_size
-            q, p, ql, pl, a = data[begin_idx:begin_idx+FLAGS.batch_size]
-        answer_start, answer_end = session.run(model.answer, model.fill_feed_dict(q, p, ql, pl))
+            feed_dict_inputs = data[begin_idx:begin_idx+FLAGS.batch_size]
+
+        if input_model:
+            #feed into siamese model instead
+            question = feed_dict_inputs[0]
+            M = input_model.run(question)
+            feed_dict_inputs[0] = M
+        feed_dict = model.fill_feed_dict(*feed_dict_inputs)
+        answer_start, answer_end = session.run(model.answer, feed_dict)
         # for i, s in enumerate(answer_start):
         #     if s > answer_end[i]:
         #         print('predicted: ', (s, answer_end[i], pl[i]), 'truth: ', (a[i][0], a[i][1]))
@@ -323,10 +334,10 @@ def do_train(model, train, dev, input_model = None):
                 fetch_dict = {'loss': model.loss}
                 dev_loss = sess.run(fetch_dict, feed_dict)['loss']
                 start_evaluate = timer()
-                prediction, truth = multibatch_prediction_truth(sess, model, dev, num_batches=20, random=True)
+                prediction, truth = multibatch_prediction_truth(sess, model, dev, num_batches=20, random=True, input_model = input_model)
                 dev_f1 = f1(prediction, truth)
                 dev_em = exact_match(prediction, truth)
-                prediction, truth = multibatch_prediction_truth(sess, model, train, num_batches=20, random=True)
+                prediction, truth = multibatch_prediction_truth(sess, model, train, num_batches=20, random=True, input_model = input_model)
                 train_f1 = f1(prediction, truth)
                 train_em = exact_match(prediction, truth)
                 summary_writer.add_summary(tf.Summary(value=[tf.Summary.Value(tag='F1_DEV', simple_value=dev_f1)]), step)
@@ -360,7 +371,7 @@ def save_flags():
             break
 
 
-def test_overfit(model, train):
+def test_overfit(model, train, input_model = None):
     """ Tests that model can overfit on small datasets.
 
     Args:  
@@ -383,7 +394,7 @@ def test_overfit(model, train):
                     question = feed_dict_inputs[0]
                     M = input_model.run(question)
                     input_dict_inputs[0] = M
-                feed_dict = model.fill_feed_dict(*feed_dict_inputs, is_training=True)
+                feed_dict = model.fill_feed_dict(*feed_dict_inputs)
 
                 fetch_dict = {
                     'step': tf.train.get_global_step(),
@@ -398,7 +409,7 @@ def test_overfit(model, train):
                 if step == steps_per_epoch-1:
                     print(f'Cross entropy: {loss:.2f}')
                     train.length = test_size
-                    prediction, truth = multibatch_prediction_truth(session, model, train, 1)
+                    prediction, truth = multibatch_prediction_truth(session, model, train, 1, input_model = input_model)
                     overfit_f1 = f1(prediction, truth)
                     print(f'F1: {overfit_f1:.2f}')
             global_step = tf.train.get_global_step().eval()
@@ -447,7 +458,7 @@ def main(_):
             siamese_config['mode'] = 'test'
 
         checkpoint_dir = '../../paraphrase-id-tensorflow-master/models/baseline_siamese/{}/'.format(FLAGS.siamese_model_num)
-        siamese_graph = ImportGraph(checkpoint_dir)
+        siamese_graph = ImportGraph(checkpoint_dir, embeddings)
 
     
     # Build model
@@ -465,36 +476,54 @@ def main(_):
         save_flags()
         do_train(model, train, dev, input_model = siamese_graph)
     elif FLAGS.mode == 'eval':
-        do_eval(model, train, dev)
+        do_eval(model, train, dev, input_model = siamese_graph)
     elif FLAGS.mode == 'overfit':
-        test_overfit(model, train)
+        test_overfit(model, train, input_model = siamese_graph)
     elif FLAGS.mode == 'shell':
-        do_shell(model, dev)
+        do_shell(model, dev, input_model = siamese_graph)
     else:
         raise ValueError(f'Incorrect mode entered, {FLAGS.mode}')
 
 class ImportGraph():
     """  Importing and running isolated TF graph """
-    def __init__(self, loc):
+    def __init__(self, loc, embeddings):
         # Create local graph and use it in the session
         graph = tf.Graph()
         self.sess = tf.Session(graph = graph)
+        self.word_embedding_matrix = embeddings
         with graph.as_default():
             latest_ckpt = tf.train.latest_checkpoint(loc)
-            print(latest_ckpt)
+            #print(latest_ckpt)
             # Import saved model from location 'loc' into local graph
             self.saver = tf.train.import_meta_graph(latest_ckpt + '.meta', clear_devices=True)
             self.saver.restore(self.sess, latest_ckpt)
+
+            #get placeholders and output Matrix 
+            self.sentence = self.sess.graph.get_tensor_by_name('sentence_one:0')
+            self.is_train = self.sess.graph.get_tensor_by_name('is_train:0')
+            self.sentence_len = self.sess.graph.get_tensor_by_name('sen_len_one:0')
+
             self.M = self.sess.graph.get_operation_by_name('sentence_one/M')
+
+            print(self.M)
+
 
     def run(self, question):
         """ Running the activation operation previously imported """
-        print(question)
-        print(self.sess.graph.get_tensor_by_name('word_emb_mat:0'))
-        return self.sess.run(self.M, feed_dict={"sentence_one:0": question, 'is_train:0': False})
+        question = np.array(question, dtype = 'int32')
+        sentence_mask = np.sign(question)
+        sentence_len = np.sum(sentence_mask, axis = 1)
+        embedded = self.word_embedding_matrix[question]
 
 
+        H = self.sess.graph.get_operation_by_name('sentence_one/H')
+        output = self.sess.graph.get_operation_by_name('sentence_one/output')
 
+        outputs = self.sess.run([self.M, H, output, self.sentence, self.is_train, self.sentence_len], feed_dict={self.sentence: embedded, self.is_train: False, self.sentence_len: sentence_len})
+        print(outputs[0])
+        print(outputs[1])
+        print(outputs[2])
+        return outputs[0]
 
 
 

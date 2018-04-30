@@ -9,6 +9,9 @@ from ..base_tf_model import BaseTFModel
 from ...util.switchable_dropout_wrapper import SwitchableDropoutWrapper
 from ...util.pooling import mean_pool
 from ...util.rnn import last_relevant_output
+
+import numpy as np
+
 '''
 import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
@@ -118,8 +121,8 @@ class SiameseBiLSTM(BaseTFModel):
                                            dtype="float",
                                            trainable=self.fine_tune_embeddings)
 
-        self.rnn_cell_fw = LSTMCell(self.rnn_hidden_size, state_is_tuple=True)
-        self.rnn_cell_bw = LSTMCell(self.rnn_hidden_size, state_is_tuple=True)
+        self.rnn_cell_fw = LSTMCell(self.rnn_hidden_size, state_is_tuple=True, scope_name = 'fwd_lstm')
+        self.rnn_cell_bw = LSTMCell(self.rnn_hidden_size, state_is_tuple=True, scope_name = 'bw_lstm')
 
         if config_dict:
             logger.warning("UNUSED VALUES IN CONFIG DICT: {}".format(config_dict))
@@ -139,14 +142,23 @@ class SiameseBiLSTM(BaseTFModel):
         # Define the inputs here
         # Shape: (batch_size, num_sentence_words)
         # The first input sentence.
-        self.sentence_one = tf.placeholder("int32",
-                                           [None, None],
+        # self.sentence_one = tf.placeholder("int32",
+        #                                    [None, None],
+        #                                    name="sentence_one")
+
+        # # Shape: (batch_size, num_sentence_words)
+        # # The second input sentence.
+        # self.sentence_two = tf.placeholder("int32",
+        #                                    [None, None],
+        #                                    name="sentence_two")
+        self.sentence_one = tf.placeholder("float32",
+                                           [None, None, self.word_embedding_dim],
                                            name="sentence_one")
 
         # Shape: (batch_size, num_sentence_words)
         # The second input sentence.
-        self.sentence_two = tf.placeholder("int32",
-                                           [None, None],
+        self.sentence_two = tf.placeholder("float32",
+                                           [None, None, self.word_embedding_dim],
                                            name="sentence_two")
 
         # Shape: (batch_size, 2)
@@ -156,19 +168,17 @@ class SiameseBiLSTM(BaseTFModel):
                                      [None, 2],
                                      name="true_labels")
 
+        self.sentence_len_one = tf.placeholder("int32", [None], name="sen_len_one")
+        self.sentence_len_two = tf.placeholder("int32", [None], name="sen_len_two")
+
         # A boolean that encodes whether we are training or evaluating
         self.is_train = tf.placeholder('bool', [], name='is_train')
 
-    def process_sentence(self, sentence, scope_name = 'scope'):
+    def process_sentence(self, word_embedded_sentence, sentence_len, scope_name = 'scope'):
 
-        sentence_mask = tf.sign(sentence, name="sentence_masking")
-        sentence_len = tf.reduce_sum(sentence_mask, 1)
+        # sentence_mask = tf.sign(sentence, name="sentence_masking")
+        # sentence_len = tf.reduce_sum(sentence_mask, 1)
         
-        with tf.variable_scope("word_embeddings"):
-            # Shape: (batch_size, num_sentence_words, embedding_dim)
-            word_embedded_sentence = tf.nn.embedding_lookup(
-                self.word_emb_mat,
-                sentence)
 
         # dropout layers
         d_rnn_cell_fw = SwitchableDropoutWrapper(self.rnn_cell_fw,
@@ -182,14 +192,14 @@ class SiameseBiLSTM(BaseTFModel):
             #with tf.variable_scope("encode_sentences"):
                 # Encode the first sentence.
         (fw_output, bw_output), _ = tf.nn.bidirectional_dynamic_rnn(
-            cell_fw=d_rnn_cell_fw,
-            cell_bw=d_rnn_cell_bw,
+            cell_fw=self.rnn_cell_fw,
+            cell_bw=self.rnn_cell_bw,
             dtype="float",
             sequence_length=sentence_len,
             inputs=word_embedded_sentence,
             scope="encoded_sentence")
 
-        H = tf.concat([fw_output, bw_output], -1)
+        H = tf.concat([fw_output, bw_output], -1, name = scope_name + '/' + 'H')
         # H1.shape = (?, ?, 512)
 
         A = self.multi_attention(H)
@@ -204,7 +214,7 @@ class SiameseBiLSTM(BaseTFModel):
         a = self.reg_attention(M)
 
         #(?, r)*(?, r, 512)
-        encoded_sentence = tf.squeeze(tf.matmul(a, M), axis = 1)
+        encoded_sentence = tf.squeeze(tf.matmul(a, M), axis = 1, name = scope_name + '/' + 'output')
         return M, A, encoded_sentence
 
     @overrides
@@ -213,8 +223,13 @@ class SiameseBiLSTM(BaseTFModel):
         Using the values in the config passed to the SiameseBiLSTM object
         on creation, build the forward pass of the computation graph.
         """
-        M1, A1, encoded_sentence_one = self.process_sentence(self.sentence_one, scope_name = 'sentence_one')
-        M2, A2, encoded_sentence_two = self.process_sentence(self.sentence_two, scope_name = 'sentence_two')
+        # with tf.variable_scope("word_embeddings"):
+        #     # Shape: (batch_size, num_sentence_words, embedding_dim)
+        #     embedded_sentence_one = tf.nn.embedding_lookup( self.word_emb_mat, self.sentence_one)
+        #     embedded_sentence_two = tf.nn.embedding_lookup( self.word_emb_mat, self.sentence_two)
+
+        M1, A1, encoded_sentence_one = self.process_sentence(self.sentence_one, self.sentence_len_one, scope_name = 'sentence_one')
+        M2, A2, encoded_sentence_two = self.process_sentence(self.sentence_two, self.sentence_len_two, scope_name = 'sentence_two')
 
         with tf.name_scope("loss"):
             # Use the exponential of the negative L1 distance
@@ -283,27 +298,54 @@ class SiameseBiLSTM(BaseTFModel):
     @overrides
     def _get_train_feed_dict(self, batch):
         inputs, targets = batch
-        feed_dict = {self.sentence_one: inputs[0],
-                     self.sentence_two: inputs[1],
+
+        sentence_mask_one = np.sign(inputs[0])
+        sentence_len_one = np.sum(sentence_mask_one, axis = 1)
+        sentence_mask_two = np.sign(inputs[1])
+        sentence_len_two = np.sum(sentence_mask_two, axis = 1)
+
+
+        feed_dict = {self.sentence_one: self.word_embedding_matrix[inputs[0]],
+                     self.sentence_two: self.word_embedding_matrix[inputs[1]],
                      self.y_true: targets[0],
-                     self.is_train: True}
+                     self.is_train: True,
+                     self.sentence_len_one: sentence_len_one,
+                     self.sentence_len_two: sentence_len_two}
         return feed_dict
 
     @overrides
     def _get_validation_feed_dict(self, batch):
         inputs, targets = batch
-        feed_dict = {self.sentence_one: inputs[0],
-                     self.sentence_two: inputs[1],
+
+        sentence_mask_one = np.sign(inputs[0])
+        sentence_len_one = np.sum(sentence_mask_one, axis = 1)
+        sentence_mask_two = np.sign(inputs[1])
+        sentence_len_two = np.sum(sentence_mask_two, axis = 1)
+
+
+        feed_dict = {self.sentence_one: self.word_embedding_matrix[inputs[0]],
+                     self.sentence_two: self.word_embedding_matrix[inputs[1]],
                      self.y_true: targets[0],
-                     self.is_train: False}
+                     self.is_train: False,
+                     self.sentence_len_one: sentence_len_one,
+                     self.sentence_len_two: sentence_len_two}
         return feed_dict
 
     @overrides
     def _get_test_feed_dict(self, batch):
         inputs, _ = batch
-        feed_dict = {self.sentence_one: inputs[0],
-                     self.sentence_two: inputs[1],
-                     self.is_train: False}
+
+        sentence_mask_one = np.sign(inputs[0])
+        sentence_len_one = np.sum(sentence_mask_one, axis = 1)
+        sentence_mask_two = np.sign(inputs[1])
+        sentence_len_two = np.sum(sentence_mask_two, axis = 1)
+
+
+        feed_dict = {self.sentence_one: self.word_embedding_matrix[inputs[0]],
+                     self.sentence_two: self.word_embedding_matrix[inputs[1]],
+                     self.is_train: False,
+                     self.sentence_len_one: sentence_len_one,
+                     self.sentence_len_two: sentence_len_two}
         return feed_dict
 
     def _l1_similarity(self, sentence_one, sentence_two):
