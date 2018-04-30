@@ -41,8 +41,8 @@ class DCN:
                 # 2u x 300
                 two_u = 2*siamese_output_dim # embedding dimension of bi-directional siamese network
                 self.M = tf.placeholder(tf.float32, (None, None, two_u), name='M')
-                W = tf.get_variable('siamese_to_dcn', shape=[1, two_u, self.hparams['embedding_size']], dtype=tf.float32) # convert this to dcn network size
-                q_embeddings = tf.matmul(self.M, W)
+                W = tf.get_variable('siamese_to_dcn', shape=[two_u, self.hparams['embedding_size']], dtype=tf.float32) # convert this to dcn network size
+                q_embeddings = tf.tensordot(self.M, W, [[2],[0]])
             else:
                 q_embeddings = tf.nn.embedding_lookup(embedded_vocab, self.question)
             p_embeddings = tf.nn.embedding_lookup(embedded_vocab, self.paragraph)

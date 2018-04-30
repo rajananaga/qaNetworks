@@ -7,9 +7,7 @@ from timeit import default_timer as timer
 from os.path import join as pjoin
 
 import json
-import sys
-sys.path.append('../../paraphrase-id-tensorflow-master/models/siamese_bilstm/')
-from siamese_bilstm import SiameseBiLSTM
+from duplicate_questions.models.siamese_bilstm.siamese_bilstm import SiameseBiLSTM
 
 import tensorflow as tf
 import numpy as np
@@ -530,15 +528,20 @@ class ImportModel():
     def __init__(self, loc, config, embeddings):
         graph = tf.Graph()
         self.sess = tf.Session(graph=graph)
-        saver = tf.train.Saver()
         self.word_embedding_matrix = embeddings
 
         with graph.as_default():
-            self.siamese_model = SiameseBiLSTM(vars(config))
+            self.siamese_model = SiameseBiLSTM(config)
             self.siamese_model.build_graph()
 
+            self.M, _, _ = self.siamese_model.process_sentence(
+                        self.siamese_model.sentence_one,
+                        self.siamese_model.sentence_len_one)
+
             latest_ckpt = tf.train.latest_checkpoint(loc)
-            saver.restore(self.sess, loc)
+            saver = tf.train.Saver()
+            saver.restore(self.sess, latest_ckpt)
+
 
     def run(self, question):
         question = np.array(question, dtype = 'int32')
@@ -546,11 +549,7 @@ class ImportModel():
         sentence_len = np.sum(sentence_mask, axis = 1)
         embedded = self.word_embedding_matrix[question]
 
-        M, _, _ = self.siamese_model.process_sentence(
-                        self.siamese_model.sentence_one,
-                        self.siamese_model.sentence_len_one)
-
-        return self.sess.run(M, feed_dict={self.siamese_model.sentence_one: embedded,
+        return self.sess.run(self.M, feed_dict={self.siamese_model.sentence_one: embedded,
                                            self.siamese_model.sentence_len_one: sentence_len,
                                            self.siamese_model.is_train: False})
 

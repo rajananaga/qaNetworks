@@ -121,8 +121,8 @@ class SiameseBiLSTM(BaseTFModel):
                                            dtype="float",
                                            trainable=self.fine_tune_embeddings)
 
-        self.rnn_cell_fw = LSTMCell(self.rnn_hidden_size, state_is_tuple=True, scope_name = 'fwd_lstm')
-        self.rnn_cell_bw = LSTMCell(self.rnn_hidden_size, state_is_tuple=True, scope_name = 'bw_lstm')
+        self.rnn_cell_fw = LSTMCell(self.rnn_hidden_size, state_is_tuple=True)
+        self.rnn_cell_bw = LSTMCell(self.rnn_hidden_size, state_is_tuple=True)
 
         if config_dict:
             logger.warning("UNUSED VALUES IN CONFIG DICT: {}".format(config_dict))
@@ -192,8 +192,8 @@ class SiameseBiLSTM(BaseTFModel):
             #with tf.variable_scope("encode_sentences"):
                 # Encode the first sentence.
         (fw_output, bw_output), _ = tf.nn.bidirectional_dynamic_rnn(
-            cell_fw=self.rnn_cell_fw,
-            cell_bw=self.rnn_cell_bw,
+            cell_fw=d_rnn_cell_fw,
+            cell_bw=d_rnn_cell_bw,
             dtype="float",
             sequence_length=sentence_len,
             inputs=word_embedded_sentence,
