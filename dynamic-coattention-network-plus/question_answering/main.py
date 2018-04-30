@@ -7,9 +7,9 @@ from timeit import default_timer as timer
 from os.path import join as pjoin
 
 import json
-#import sys
-#sys.path.append('../../paraphrase-id-tensorflow-master/models/siamese_bilstm/')
-#from siamese_bilstm import SiameseBiLSTM
+import sys
+sys.path.append('../../paraphrase-id-tensorflow-master/models/siamese_bilstm/')
+from siamese_bilstm import SiameseBiLSTM
 
 import tensorflow as tf
 import numpy as np
@@ -458,7 +458,8 @@ def main(_):
             siamese_config['mode'] = 'test'
 
         checkpoint_dir = '../../paraphrase-id-tensorflow-master/models/baseline_siamese/{}/'.format(FLAGS.siamese_model_num)
-        siamese_graph = ImportGraph(checkpoint_dir, embeddings)
+        # siamese_graph = ImportGraph(checkpoint_dir, embeddings)
+        siamese_graph = ImportModel(checkpoint_dir, siamese_config, embeddings)
 
     
     # Build model
@@ -525,9 +526,33 @@ class ImportGraph():
         print(outputs[2])
         return outputs[0]
 
+class ImportModel():
+    def __init__(self, loc, config, embeddings):
+        graph = tf.Graph()
+        self.sess = tf.Session(graph=graph)
+        saver = tf.train.Saver()
+        self.word_embedding_matrix = embeddings
 
+        with graph.as_default():
+            self.siamese_model = SiameseBiLSTM(vars(config))
+            self.siamese_model.build_graph()
 
+            latest_ckpt = tf.train.latest_checkpoint(loc)
+            saver.restore(self.sess, loc)
 
+    def run(self, question):
+        question = np.array(question, dtype = 'int32')
+        sentence_mask = np.sign(question)
+        sentence_len = np.sum(sentence_mask, axis = 1)
+        embedded = self.word_embedding_matrix[question]
+
+        M, _, _ = self.siamese_model.process_sentence(
+                        self.siamese_model.sentence_one,
+                        self.siamese_model.sentence_len_one)
+
+        return self.sess.run(M, feed_dict={self.siamese_model.sentence_one: embedded,
+                                           self.siamese_model.sentence_len_one: sentence_len,
+                                           self.siamese_model.is_train: False})
 
 if __name__ == "__main__":
     tf.app.run()
