@@ -1,0 +1,1 @@
+tensorboard --logdir=./logs/baseline_siamese/00/ --port=6006

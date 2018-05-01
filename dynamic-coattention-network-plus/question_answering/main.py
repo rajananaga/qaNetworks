@@ -276,6 +276,7 @@ def do_train(model, train, dev, input_model = None):
     losses = []
     init = tf.global_variables_initializer()
     summary = tf.summary.merge_all()
+
     saver = tf.train.Saver()
 
     # Training session  
@@ -289,6 +290,7 @@ def do_train(model, train, dev, input_model = None):
         latest_ckpt = tf.train.latest_checkpoint(checkpoint_dir)
         if latest_ckpt:
             saver.restore(sess, latest_ckpt)
+
         start = timer()
         epoch = -1
         for i in itertools.count():
@@ -413,6 +415,15 @@ def test_overfit(model, train, input_model = None):
             global_step = tf.train.get_global_step().eval()
             print(f'Epoch took {timer() - epoch_start:.2f} s (step: {global_step})')
 
+def pad_embeddings(matrix, max_len): 
+    # pads or curtails output of siamese network to fit the dcn network
+    shape = matrix.shape
+    seq_len = shape[1]
+    if seq_len>max_len:
+        return matrix[:, :seq_len]
+    else:
+        to_pad = np.zeros((shape[0], max_len-seq_len, shape[2]))
+        return np.concatenate((matrix, to_pad), axis = 1)
 
 def main(_):
     """ Typical usage
@@ -549,9 +560,11 @@ class ImportModel():
         sentence_len = np.sum(sentence_mask, axis = 1)
         embedded = self.word_embedding_matrix[question]
 
-        return self.sess.run(self.M, feed_dict={self.siamese_model.sentence_one: embedded,
+        M = self.sess.run(self.M, feed_dict={self.siamese_model.sentence_one: embedded,
                                            self.siamese_model.sentence_len_one: sentence_len,
                                            self.siamese_model.is_train: False})
+
+        return pad_embeddings(M, FLAGS.max_question_length)
 
 if __name__ == "__main__":
     tf.app.run()

@@ -62,7 +62,7 @@ def main():
                            help=("number of epochs with no validation "
                                  "accuracy improvement after which training "
                                  "will be stopped"))
-    argparser.add_argument("--num_sentence_words", type=int, default=25,
+    argparser.add_argument("--num_sentence_words", type=int, default=40,
                            help=("The maximum length of a sentence. Longer "
                                  "sentences will be truncated, and shorter "
                                  "ones will be padded."))
@@ -124,6 +124,8 @@ def main():
                                  "reweight the prediction probabilities to "
                                  "account for class proportion discrepancy "
                                  "between train and test."))
+    argparser.add_argument("--contrastive_loss", action="store_true",
+                       help=("Toggle for contrastive vs. cross entropy loss."))
 
     config = argparser.parse_args()
 
@@ -205,6 +207,13 @@ def main():
                     open(os.path.join(save_dir, data_manager_pickle_name), "wb"))
 
         patience = config.early_stopping_patience
+
+        if os.path.isdir('models/baseline_siamese/' + run_id):
+            print("Hellllllllllllo")
+            model_load_dir = 'models/baseline_siamese/' + run_id
+        else:
+            model_load_dir = None
+
         model.train(get_train_instance_generator=get_train_data_gen,
                     get_val_instance_generator=get_val_data_gen,
                     batch_size=batch_size,
@@ -216,7 +225,8 @@ def main():
                     log_period=log_period,
                     val_period=val_period,
                     save_period=save_period,
-                    patience=patience)
+                    patience=patience,
+                    model_load_dir = model_load_dir)
     else:
         # Predict with the model
         model_load_dir = config.model_load_dir

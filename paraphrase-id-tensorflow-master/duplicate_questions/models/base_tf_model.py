@@ -108,7 +108,7 @@ class BaseTFModel:
               batch_size, num_train_steps_per_epoch, num_epochs,
               num_val_steps, save_path, log_path,
               val_period=250, log_period=10, save_period=250,
-              max_ckpts_to_keep=10, patience=0):
+              max_ckpts_to_keep=10, patience=0, model_load_dir = None):
         """
         Train the model.
 
@@ -174,6 +174,12 @@ class BaseTFModel:
                                                sess.graph)
             # Set up a Saver for periodically serializing the model.
             saver = tf.train.Saver(max_to_keep=max_ckpts_to_keep)
+            if model_load_dir:
+                logger.info("Getting latest checkpoint in {}".format(model_load_dir))
+                last_checkpoint = tf.train.latest_checkpoint(model_load_dir)
+                logger.info("Attempting to load checkpoint at {}".format(last_checkpoint))
+                saver.restore(sess, last_checkpoint)
+                logger.info("Successfully loaded {}!".format(last_checkpoint))
 
             epoch_validation_losses = []
             # Iterate over a generator that returns batches.

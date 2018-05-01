@@ -100,6 +100,8 @@ class SiameseBiLSTM(BaseTFModel):
         self.ATT1 = tf.get_variable(name = 'w3', shape = (2*self.rnn_hidden_size, self.att_dim), trainable = trainable)
         self.ATT2 = tf.get_variable(name = 'w4', shape = (self.att_dim, 1), trainable = trainable)
 
+        self.use_contrastive = config_dict.pop("contrastive_loss")
+        self.margin = 1.25 #margin for contrastive loss
 
         if self.mode == "train":
             # Load the word embedding matrix that was passed in
@@ -236,14 +238,16 @@ class SiameseBiLSTM(BaseTFModel):
             # between the two encoded sentences to get an output
             # distribution over labels.
             # Shape: (batch_size, 2)
-            self.y_pred = self._l1_similarity(encoded_sentence_one, encoded_sentence_two)
+            
             # Manually calculating cross-entropy, since we output
             # probabilities and can't use softmax_cross_entropy_with_logits
             # Add epsilon to the probabilities in order to prevent log(0)
-            self.loss = tf.reduce_mean(
-                -tf.reduce_sum(tf.cast(self.y_true, "float") *
-                               tf.log(self.y_pred),
-                               axis=1))
+
+            if self.use_contrastive:
+                self.loss = self.constrastive_loss(encoded_sentence_one, encoded_sentence_two, self.y_true)
+            else:
+                self.y_pred = self._l1_similarity(encoded_sentence_one, encoded_sentence_two)
+                self.loss = tf.reduce_mean(-tf.reduce_sum(tf.cast(self.y_true, "float") *tf.log(self.y_pred),axis=1))
 
             self.loss = self.loss + self.matrix_penalty(A1) + self.matrix_penalty(A2) #add matrix penalty
 
@@ -268,6 +272,12 @@ class SiameseBiLSTM(BaseTFModel):
             tf.summary.scalar("loss", self.loss)
             tf.summary.scalar("accuracy", self.accuracy)
             self.summary_op = tf.summary.merge_all()
+
+    def constrastive_loss(self, sentence_one, sentence_two, y_true):
+        Dw = tf.norm(sentence_one - sentence_two, ord = 'euclidean', axis = 1)
+        y = y_true[:,0]
+        loss = 0.5*((1-y)*(tf.pow(Dw, 2)) + y*tf.pow(tf.clip_by_value(self.margin - Dw, clip_value_min=0), 2))
+        return loss
 
     def multi_attention(self, H):
         #  (?, T, 512) * (512, 256) = (?, T, 256)
