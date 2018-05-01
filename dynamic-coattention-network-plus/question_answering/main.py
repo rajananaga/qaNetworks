@@ -7,7 +7,7 @@ from timeit import default_timer as timer
 from os.path import join as pjoin
 
 import json
-from duplicate_questions.models.siamese_bilstm.siamese_bilstm import SiameseBiLSTM
+#from duplicate_questions.models.siamese_bilstm.siamese_bilstm import SiameseBiLSTM
 
 import tensorflow as tf
 import numpy as np
@@ -17,6 +17,10 @@ from utils import initialize_vocab, get_normalized_train_dir, f1, get_data_paths
 from preprocessing.qa_data import UNK_ID, PAD_ID
 from networks.dcn_model import DCN
 from dataset import SquadDataset, pad_sequence
+
+import sys
+sys.path.append('../../paraphrase-id-tensorflow-master')
+from duplicate_questions.models.siamese_bilstm.siamese_bilstm import SiameseBiLSTM
 
 logging.basicConfig(level=logging.INFO)
 
