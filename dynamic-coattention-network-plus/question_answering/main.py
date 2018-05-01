@@ -7,7 +7,7 @@ from timeit import default_timer as timer
 from os.path import join as pjoin
 
 import json
-from duplicate_questions.models.siamese_bilstm.siamese_bilstm import SiameseBiLSTM
+#from duplicate_questions.models.siamese_bilstm.siamese_bilstm import SiameseBiLSTM
 
 import tensorflow as tf
 import numpy as np
@@ -17,6 +17,10 @@ from utils import initialize_vocab, get_normalized_train_dir, f1, get_data_paths
 from preprocessing.qa_data import UNK_ID, PAD_ID
 from networks.dcn_model import DCN
 from dataset import SquadDataset, pad_sequence
+
+import sys
+sys.path.append('../../paraphrase-id-tensorflow-master')
+from duplicate_questions.models.siamese_bilstm.siamese_bilstm import SiameseBiLSTM
 
 logging.basicConfig(level=logging.INFO)
 
@@ -280,8 +284,9 @@ def do_train(model, train, dev, input_model = None):
 
     if FLAGS.initialize_siamese_to_dcn:
         vars_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        vars_list = [var for var in vars_list if var.name != 'embeddings/siamese_to_dcn']
-        saver = tf.train.Saver(vars_list=vars_list)
+        vars_list = [var for var in vars_list if var.name != 'embeddings/siamese_to_dcn:0']
+        print(vars_list, "vars_list")
+        saver = tf.train.Saver(var_list=vars_list)
     else:
         saver = tf.train.Saver()
 
