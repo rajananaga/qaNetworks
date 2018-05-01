@@ -284,8 +284,9 @@ def do_train(model, train, dev, input_model = None):
 
     if FLAGS.initialize_siamese_to_dcn:
         vars_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        vars_list = [var for var in vars_list if var.name != 'embeddings/siamese_to_dcn']
-        saver = tf.train.Saver(vars_list=vars_list)
+        vars_list = [var for var in vars_list if var.name != 'embeddings/siamese_to_dcn:0']
+        print(vars_list, "vars_list")
+        saver = tf.train.Saver(var_list=vars_list)
     else:
         saver = tf.train.Saver()
 
