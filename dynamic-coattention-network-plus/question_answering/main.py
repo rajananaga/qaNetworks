@@ -24,6 +24,7 @@ logging.basicConfig(level=logging.INFO)
 tf.app.flags.DEFINE_string('mode', 'train', 'Mode to use, train/eval/shell/overfit')
 tf.app.flags.DEFINE_string('siamese_model_num', '00', 'Path to config log for siamese network')
 tf.app.flags.DEFINE_string('use_siamese', True, 'Path to config log for siamese network')
+tf.app.flags.DEFINE_string('initialize_siamese_to_dcn', True, 'Set this to False if you\'re initializing from a baseline DCN')
 
 # Training hyperparameters
 tf.app.flags.DEFINE_integer("max_steps", 50000, "Steps until training loop stops.")
@@ -277,7 +278,12 @@ def do_train(model, train, dev, input_model = None):
     init = tf.global_variables_initializer()
     summary = tf.summary.merge_all()
 
-    saver = tf.train.Saver()
+    if FLAGS.initialize_siamese_to_dcn:
+        vars_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        vars_list = [var for var in vars_list if var.name != 'embeddings/siamese_to_dcn']
+        saver = tf.train.Saver(vars_list=vars_list)
+    else:
+        saver = tf.train.Saver()
 
     # Training session  
     config = tf.ConfigProto()
@@ -290,6 +296,8 @@ def do_train(model, train, dev, input_model = None):
         latest_ckpt = tf.train.latest_checkpoint(checkpoint_dir)
         if latest_ckpt:
             saver.restore(sess, latest_ckpt)
+        if FLAGS.initialize_siamese_to_dcn:
+            saver = tf.train.Saver()
 
         start = timer()
         epoch = -1
