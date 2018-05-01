@@ -339,6 +339,11 @@ def do_train(model, train, dev, input_model = None):
             # Train/Dev Evaluation
             if step != 0 and (step == 200 or step % 600 == 0):
                 feed_dict = model.fill_feed_dict(*dev.get_batch(FLAGS.batch_size))
+                if input_model:
+                    #feed into siamese model instead
+                    question = feed_dict_inputs[0]
+                    M = input_model.run(question)
+                    feed_dict_inputs[0] = M
                 fetch_dict = {'loss': model.loss}
                 dev_loss = sess.run(fetch_dict, feed_dict)['loss']
                 start_evaluate = timer()
