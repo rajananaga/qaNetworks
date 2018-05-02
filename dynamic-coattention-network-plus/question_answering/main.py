@@ -82,7 +82,7 @@ tf.app.flags.DEFINE_integer("print_every", 200, "How many iterations to do per p
 
 # Directories etc.
 tf.app.flags.DEFINE_string("model_name", datetime.now().strftime('%y%m%d_%H%M%S'), "Models name, used for folder management.")
-tf.app.flags.DEFINE_string("data_dir", os.path.join("..", "data", "squad"), "SQuAD directory (default ../data/squad)") 
+tf.app.flags.DEFINE_string("data_dir", os.path.join("..", "data", "squad"), "SQuAD directory (default ../data/squad)")
 tf.app.flags.DEFINE_string("train_dir", os.path.join("..", "checkpoints"), "Training directory to save the model parameters (default: ../checkpoints).")
 tf.app.flags.DEFINE_string("vocab_path", os.path.join("..", "data", "squad", "vocab.dat"), "Path to vocab file (default: ../data/squad/vocab.dat)")
 tf.app.flags.DEFINE_string("embed_path", "", "Path to the trimmed GLoVe embedding (default: ../data/squad/glove.trimmed.{embedding_size}.npz)")
@@ -97,11 +97,11 @@ FLAGS = tf.app.flags.FLAGS
 def reverse_indices(indices, rev_vocab):
     """ Recovers words from embedding indices
 
-    Args:  
-        indices: Integer indices to recover words for.  
-        rev_vocab: Reverse vocabulary. Dictionary mapping indices to words.  
-    
-    Returns:  
+    Args:
+        indices: Integer indices to recover words for.
+        rev_vocab: Reverse vocabulary. Dictionary mapping indices to words.
+
+    Returns:
         String of words with space as separation
     """
     return ' '.join([rev_vocab[idx] for idx in indices if idx != PAD_ID])
@@ -110,11 +110,11 @@ def reverse_indices(indices, rev_vocab):
 def do_shell(model, dev, input_model = None):
     """ Interactive shell
 
-    Type a question, write next for the next paragraph or enter a blank for another human's question.  
+    Type a question, write next for the next paragraph or enter a blank for another human's question.
 
-    Args:  
-        model: QA model that has an instance variable 'answer' that returns answer span and takes placeholders  
-        question, question_length, paragraph, paragraph_length  
+    Args:
+        model: QA model that has an instance variable 'answer' that returns answer span and takes placeholders
+        question, question_length, paragraph, paragraph_length
         dev: Development set
     """
     # what is is_training if import_meta_graph
@@ -136,7 +136,7 @@ def do_shell(model, dev, input_model = None):
                 if not i:
                     print('\n')
                     print(paragraph, end='\n\n')
-                
+
                 question_input = input('QUESTION: ')
 
                 if question_input == 'next':
@@ -155,7 +155,7 @@ def do_shell(model, dev, input_model = None):
                     question = feed_dict_inputs[0]
                     question = input_model.run(question)
                 feed_dict = model.fill_feed_dict(questions, paragraphs, question_lengths, paragraph_lengths)
-                
+
                 if False: #load_meta
                     start, end = session.run(['prediction/answer_start:0', 'prediction/answer_end:0'], feed_dict)
                     start, end = start[0], end[0]
@@ -186,16 +186,16 @@ def parameter_space_size():
 def do_eval(model, train, dev, input_model = None):
     """ Evaluates a model on training and development set
 
-    Args:  
-        model: QA model that has an instance variable 'answer' that returns answer span and takes placeholders  
-        question, question_length, paragraph, paragraph_length  
-        train: Training set  
+    Args:
+        model: QA model that has an instance variable 'answer' that returns answer span and takes placeholders
+        question, question_length, paragraph, paragraph_length
+        train: Training set
         dev: Development set
     """
     checkpoint_dir = os.path.join(FLAGS.train_dir, FLAGS.model_name)
     parameter_space_size()
     saver = tf.train.Saver()
-    # TODO add loop to run over all checkpoints in folder, 
+    # TODO add loop to run over all checkpoints in folder,
     # Training session
     with tf.Session() as session:
         saver.restore(session, tf.train.latest_checkpoint(checkpoint_dir))
@@ -203,7 +203,7 @@ def do_eval(model, train, dev, input_model = None):
 
         # Train/Dev Evaluation
         start_evaluate = timer()
-        
+
         prediction, truth = multibatch_prediction_truth(session, model, train, FLAGS.eval_batches, input_model = input_model)
         train_f1 = f1(prediction, truth)
         train_em = exact_match(prediction, truth)
@@ -220,17 +220,17 @@ def do_eval(model, train, dev, input_model = None):
 def multibatch_prediction_truth(session, model, data, num_batches=None, random=False, input_model = None):
     """ Returns batches of predictions and ground truth answers.
 
-    Args:  
-        session: TensorFlow Session.  
-        model: QA model that has an instance variable 'answer' that returns answer span and takes placeholders.  
-        question, question_length, paragraph, paragraph_length.  
-        data: SquadDataset data to do minibatch evaluation on.  
-        num_batches: Number of batches of size FLAGS.batch_size to evaluate over. `None` for whole data set.  
-        random: True for random and possibly overlapping batches. False for deterministic sequential non-overlapping batches.  
-    
-    Returns:  
-        Tuple of  
-            Predictions, tuple of two numpy arrays containing start and end of answer spans  
+    Args:
+        session: TensorFlow Session.
+        model: QA model that has an instance variable 'answer' that returns answer span and takes placeholders.
+        question, question_length, paragraph, paragraph_length.
+        data: SquadDataset data to do minibatch evaluation on.
+        num_batches: Number of batches of size FLAGS.batch_size to evaluate over. `None` for whole data set.
+        random: True for random and possibly overlapping batches. False for deterministic sequential non-overlapping batches.
+
+    Returns:
+        Tuple of
+            Predictions, tuple of two numpy arrays containing start and end of answer spans
             Truth, list of tuples containing start and end of answer spans
     """
     if num_batches is None:
@@ -249,7 +249,7 @@ def multibatch_prediction_truth(session, model, data, num_batches=None, random=F
             #feed into siamese model instead
             question = feed_dict_inputs[0]
             M = input_model.run(question)
-            feed_dict_inputs[0] = M
+            feed_dict_inputs = (M,) + feed_dict_inputs[1:]
         feed_dict = model.fill_feed_dict(*feed_dict_inputs)
         answer_start, answer_end = session.run(model.answer, feed_dict)
         # for i, s in enumerate(answer_start):
@@ -267,10 +267,10 @@ def multibatch_prediction_truth(session, model, data, num_batches=None, random=F
 def do_train(model, train, dev, input_model = None):
     """ Trains a model
 
-    Args:  
-        model: QA model that has an instance variable 'answer' that returns answer span and takes placeholders  
-        question, question_length, paragraph, paragraph_length  
-        train: Training set  
+    Args:
+        model: QA model that has an instance variable 'answer' that returns answer span and takes placeholders
+        question, question_length, paragraph, paragraph_length
+        train: Training set
         dev: Development set
     """
     parameter_space_size()
@@ -290,7 +290,7 @@ def do_train(model, train, dev, input_model = None):
     else:
         saver = tf.train.Saver()
 
-    # Training session  
+    # Training session
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
 
@@ -312,7 +312,7 @@ def do_train(model, train, dev, input_model = None):
                 #feed into siamese model instead
                 question = feed_dict_inputs[0]
                 M = input_model.run(question)
-                feed_dict_inputs[0] = M
+                feed_dict_inputs = (M,) + feed_dict_inputs[1:]
             feed_dict = model.fill_feed_dict(*feed_dict_inputs, is_training=True)
 
             if epoch != train.epoch:
@@ -330,10 +330,10 @@ def do_train(model, train, dev, input_model = None):
             step = result['step']
             if 'summary' in result:
                 summary_writer.add_summary(result['summary'], step)
-            
+
             if step > 0 and (step==50 or (step % 300 == 0)):
                 saver.save(sess, os.path.join(checkpoint_dir, 'model'), step)
-            
+
             # Moving Average loss
             losses.append(result['loss'])
             if step == 1 or step == 10 or step == 50 or step == 100 or step % FLAGS.print_every == 0:
@@ -348,7 +348,7 @@ def do_train(model, train, dev, input_model = None):
                     #feed into siamese model instead
                     question = feed_dict_inputs[0]
                     M = input_model.run(question)
-                    feed_dict_inputs[0] = M
+                    feed_dict_inputs = (M,) + feed_dict_inputs[1:]
                 feed_dict = model.fill_feed_dict(*feed_dict_inputs)
                 fetch_dict = {'loss': model.loss}
                 dev_loss = sess.run(fetch_dict, feed_dict)['loss']
@@ -362,12 +362,12 @@ def do_train(model, train, dev, input_model = None):
                 summary_writer.add_summary(tf.Summary(value=[tf.Summary.Value(tag='F1_DEV', simple_value=dev_f1)]), step)
                 summary_writer.add_summary(tf.Summary(value=[tf.Summary.Value(tag='F1_TR', simple_value=train_f1)]), step)
                 print(f'Step {step}, Dev loss {dev_loss:.2f}, Train/Dev F1: {train_f1:.3f}/{dev_f1:.3f}, Train/Dev EM: {train_em:.3f}/{dev_em:.3f}, Time to evaluate: {timer() - start_evaluate:.1f} sec')
-            
+
             if step > 0 and step % FLAGS.global_steps_per_timing == 0:
                 time_iter = timer() - start
                 print(f'INFO:global_step/sec: {FLAGS.global_steps_per_timing/time_iter:.2f}')
                 start = timer()
-            
+
             if step == FLAGS.max_steps:
                 break
 
@@ -377,7 +377,7 @@ def save_flags():
     model_path = os.path.join(FLAGS.train_dir, FLAGS.model_name)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
-    
+
     for i in itertools.count():
         json_path = os.path.join(FLAGS.train_dir, FLAGS.model_name, f"flags_{i}.json")
         if os.path.exists(json_path):
@@ -393,10 +393,10 @@ def save_flags():
 def test_overfit(model, train, input_model = None):
     """ Tests that model can overfit on small datasets.
 
-    Args:  
-        model: QA model that has an instance variable 'answer' that returns answer span and takes placeholders  
-        question, question_length, paragraph, paragraph_length  
-        train: Training set  
+    Args:
+        model: QA model that has an instance variable 'answer' that returns answer span and takes placeholders
+        question, question_length, paragraph, paragraph_length
+        train: Training set
     """
     epochs = 100
     test_size = 32
@@ -434,7 +434,7 @@ def test_overfit(model, train, input_model = None):
             global_step = tf.train.get_global_step().eval()
             print(f'Epoch took {timer() - epoch_start:.2f} s (step: {global_step})')
 
-def pad_embeddings(matrix, max_len): 
+def pad_embeddings(matrix, max_len):
     # pads or curtails output of siamese network to fit the dcn network
     shape = matrix.shape
     seq_len = shape[1]
@@ -447,13 +447,13 @@ def pad_embeddings(matrix, max_len):
 def main(_):
     """ Typical usage
 
-    For <model_name> see your folder name in ../checkpoints. 
+    For <model_name> see your folder name in ../checkpoints.
 
     Training
     ``` sh
     $ python main.py --mode train --model <model> (if restoring or naming a model: --model_name <model_name>)
     ```
-    
+
     Evaluation
     ``` sh
     $ python main.py --mode eval --model <model> --model_name <model_name>
@@ -465,11 +465,11 @@ def main(_):
     ```
     """
     # Load data
-    train = SquadDataset(*get_data_paths(FLAGS.data_dir, name='train'), 
-                         max_question_length=FLAGS.max_question_length, 
+    train = SquadDataset(*get_data_paths(FLAGS.data_dir, name='train'),
+                         max_question_length=FLAGS.max_question_length,
                          max_paragraph_length=FLAGS.max_paragraph_length)
-    dev = SquadDataset(*get_data_paths(FLAGS.data_dir, name='val'), 
-                         max_question_length=FLAGS.max_question_length, 
+    dev = SquadDataset(*get_data_paths(FLAGS.data_dir, name='val'),
+                         max_question_length=FLAGS.max_question_length,
                          max_paragraph_length=FLAGS.max_paragraph_length) # change to eval to zero if too long
 
     logging.info(f'Train/Dev size {train.length}/{dev.length}')
@@ -489,7 +489,7 @@ def main(_):
         # siamese_graph = ImportGraph(checkpoint_dir, embeddings)
         siamese_graph = ImportModel(checkpoint_dir, siamese_config, embeddings)
 
-    
+
     # Build model
     if FLAGS.model in ('baseline', 'mixed', 'dcnplus', 'dcn'):
         # with tf.variable_scope('dcn'):
@@ -499,7 +499,7 @@ def main(_):
         model = Graph(embeddings)
     else:
         raise ValueError(f'{FLAGS.model} is not a supported model')
-    
+
     # Run mode
     if FLAGS.mode == 'train':
         save_flags()
@@ -527,7 +527,7 @@ class ImportGraph():
             self.saver = tf.train.import_meta_graph(latest_ckpt + '.meta', clear_devices=True)
             self.saver.restore(self.sess, latest_ckpt)
 
-            #get placeholders and output Matrix 
+            #get placeholders and output Matrix
             self.sentence = self.sess.graph.get_tensor_by_name('sentence_one:0')
             self.is_train = self.sess.graph.get_tensor_by_name('is_train:0')
             self.sentence_len = self.sess.graph.get_tensor_by_name('sen_len_one:0')
@@ -587,4 +587,3 @@ class ImportModel():
 
 if __name__ == "__main__":
     tf.app.run()
-
