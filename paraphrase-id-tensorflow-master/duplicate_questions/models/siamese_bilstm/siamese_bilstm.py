@@ -97,8 +97,9 @@ class SiameseBiLSTM(BaseTFModel):
         self.multi_ATT1 = tf.get_variable(name = 'w1', shape = (2*self.rnn_hidden_size, self.att_dim), trainable = trainable)
         self.multi_ATT2 = tf.get_variable(name = 'w2', shape = (self.att_dim, self.num_sentence_words), trainable = trainable)
 
-        self.ATT1 = tf.get_variable(name = 'w3', shape = (2*self.rnn_hidden_size, self.att_dim), trainable = trainable)
+        self.ATT1 = tf.get_variable(name = 'w3', shape = (self.rnn_hidden_size, self.att_dim), trainable = trainable)
         self.ATT2 = tf.get_variable(name = 'w4', shape = (self.att_dim, 1), trainable = trainable)
+        self.twoU2U = tf.get_variable(name = 'twoU2U', shape = (2*self.rnn_hidden_size, self.att_dim), trainable = trainable)
 
         self.use_contrastive = config_dict.pop("contrastive_loss")
         self.margin = 1.25 #margin for contrastive loss
@@ -208,10 +209,12 @@ class SiameseBiLSTM(BaseTFModel):
         # (batch, r, T) *  (batch, T, d) = (batch, r, d)
 
         #(?, r, 512)
-        M = tf.matmul(A, H, name = scope_name + '/' + 'M')
+        M = tf.matmul(A, H)
+        M = tf.tensordot(M, self.twoU2U, axes = [[2],[0]], name = scope_name + '/' + 'M')
 
         # ADD POSITIONAL ENCODING?
 
+        ######  Summary Vector Calc ######
         # a1 = (?, r)
         a = self.reg_attention(M)
 

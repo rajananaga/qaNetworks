@@ -58,7 +58,7 @@ def main():
     argparser.add_argument("--num_epochs", type=int, default=10,
                            help=("Number of epochs to perform in "
                                  "training."))
-    argparser.add_argument("--early_stopping_patience", type=int, default=0,
+    argparser.add_argument("--early_stopping_patience", type=int, default=10,
                            help=("number of epochs with no validation "
                                  "accuracy improvement after which training "
                                  "will be stopped"))
@@ -76,7 +76,7 @@ def main():
     argparser.add_argument("--fine_tune_embeddings", action="store_true",
                            help=("Whether to train the embedding layer "
                                  "(if True), or keep it fixed (False)."))
-    argparser.add_argument("--rnn_hidden_size", type=int, default=256,
+    argparser.add_argument("--rnn_hidden_size", type=int, default=300,
                            help=("The output dimension of the RNN."))
     argparser.add_argument("--share_encoder_weights", action="store_true",
                            help=("Whether to use the same encoder on both "
@@ -199,6 +199,9 @@ def main():
             logger.info("save path {} does not exist, "
                         "creating it".format(save_dir))
             os.makedirs(save_dir)
+            model_load_dir = None
+        else:
+            model_load_dir = 'models/baseline_siamese/' + run_id
 
         logger.info("Saving fitted DataManager to {}".format(save_dir))
         data_manager_pickle_name = "{}-{}-DataManager.pkl".format(model_name,
@@ -208,11 +211,10 @@ def main():
 
         patience = config.early_stopping_patience
 
-        if os.path.isdir('models/baseline_siamese/' + run_id):
-            print("Hellllllllllllo")
-            model_load_dir = 'models/baseline_siamese/' + run_id
-        else:
-            model_load_dir = None
+        # if os.path.isdir('models/baseline_siamese/' + run_id):
+            
+        # else:
+        #     model_load_dir = None
 
         model.train(get_train_instance_generator=get_train_data_gen,
                     get_val_instance_generator=get_val_data_gen,

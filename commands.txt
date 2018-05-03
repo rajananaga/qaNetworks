@@ -1,0 +1,5 @@
+#train siamese model
+python scripts/run_model/run_siamese.py train --share_encoder_weights --model_name=baseline_siamese --run_id=01 --early_stopping_patience 10
+
+# train dcn
+python main.py --embedding_size 300 --siamese_model_num 01 --model_name 01

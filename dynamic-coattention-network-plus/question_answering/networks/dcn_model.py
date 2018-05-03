@@ -25,26 +25,35 @@ class DCN:
         self.pretrained_embeddings = pretrained_embeddings
 
         # Setup placeholders
-        self.question = tf.placeholder(tf.int32, (None, None), name='question')
+        self.question = tf.placeholder(tf.float32, (None, None, hparams['embedding_size']), name='question')
         self.question_length = tf.placeholder(tf.int32, (None,), name='question_length')
         self.paragraph = tf.placeholder(tf.int32, (None, None), name='paragraph')
         self.paragraph_length = tf.placeholder(tf.int32, (None,), name='paragraph_length')
         self.answer_span = tf.placeholder(tf.int32, (None, 2), name='answer_span')
         self.is_training = tf.placeholder(tf.bool, shape=(), name='is_training')   # replace with tf.placeholder_with_default
 
-        self.use_siamese = siamese_output_dim
+        # self.use_siamese = siamese_output_dim
 
         # Word embeddings
         with tf.variable_scope('embeddings'):
             embedded_vocab = tf.Variable(self.pretrained_embeddings, name='shared_embedding', trainable=hparams['trainable_embeddings'], dtype=tf.float32)  
+            '''
             if self.use_siamese:
                 # 2u x 300
                 two_u = 2*siamese_output_dim # embedding dimension of bi-directional siamese network
+                # self.M = tf.placeholder(tf.float32, (None, None, two_u), name='M')
                 self.M = tf.placeholder(tf.float32, (None, None, two_u), name='M')
                 W = tf.get_variable('siamese_to_dcn', shape=[two_u, self.hparams['embedding_size']], dtype=tf.float32) # convert this to dcn network size
                 q_embeddings = tf.tensordot(self.M, W, [[2],[0]])
             else:
                 q_embeddings = tf.nn.embedding_lookup(embedded_vocab, self.question)
+            '''
+
+            q_embeddings = self.question #tf.nn.embedding_lookup(embedded_vocab, self.question)
+            # two_u = 2*siamese_output_dim # embedding dimension of bi-directional siamese network
+            # W = tf.get_variable('siamese_to_dcn', shape=[two_u, self.hparams['embedding_size']], dtype=tf.float32) # convert this to dcn network size
+
+
             p_embeddings = tf.nn.embedding_lookup(embedded_vocab, self.paragraph)
         
         # Character embeddings to word vectors
@@ -141,10 +150,16 @@ class DCN:
             self.is_training: is_training
         }
 
+        feed_dict[self.question] = question
+
+        '''
         if self.use_siamese:
             feed_dict[self.M] = question
         else:
             feed_dict[self.question] = question
+        '''
+        # if self.use_siamese:
+        #     feed_dict[self.m] = m
 
         if answer_span is not None:
             feed_dict[self.answer_span] = answer_span

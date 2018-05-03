@@ -19,14 +19,14 @@ from networks.dcn_model import DCN
 from dataset import SquadDataset, pad_sequence
 
 import sys
-sys.path.append('../../paraphrase-id-tensorflow-master')
+# sys.path.append('../../paraphrase-id-tensorflow-master')
 from duplicate_questions.models.siamese_bilstm.siamese_bilstm import SiameseBiLSTM
 
 logging.basicConfig(level=logging.INFO)
 
 # Mode
 tf.app.flags.DEFINE_string('mode', 'train', 'Mode to use, train/eval/shell/overfit')
-tf.app.flags.DEFINE_string('siamese_model_num', '00', 'Path to config log for siamese network')
+tf.app.flags.DEFINE_string('siamese_model_num', '01', 'Path to config log for siamese network')
 tf.app.flags.DEFINE_string('use_siamese', True, 'Path to config log for siamese network')
 tf.app.flags.DEFINE_string('initialize_siamese_to_dcn', True, 'Set this to False if you\'re initializing from a baseline DCN')
 
@@ -45,7 +45,7 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 10.0, "Clip gradients to this nor
 # Model hyperparameters
 tf.app.flags.DEFINE_string("model", 'dcnplus', "Model to train or evaluate, baseline / mixed / dcn / dcnplus")
 tf.app.flags.DEFINE_string("cell", 'lstm', "Cell type to use for RNN, gru / lstm")
-tf.app.flags.DEFINE_integer("embedding_size", 100, "Size of the pretrained vocabulary.")
+tf.app.flags.DEFINE_integer("embedding_size", 300, "Size of the pretrained vocabulary.")
 tf.app.flags.DEFINE_integer("state_size", 100, "Size of each model layer.")
 tf.app.flags.DEFINE_boolean("trainable_initial_state", False, "Make RNNCell initial states trainable.")  # Not implemented
 tf.app.flags.DEFINE_boolean("trainable_embeddings", False, "Make embeddings trainable.")
@@ -69,7 +69,7 @@ tf.app.flags.DEFINE_integer("char_embedding_size", 8, "Size of character embeddi
 tf.app.flags.DEFINE_integer("max_word_length", 15, "Maximum number of characters per word.")
 
 # Data hyperparameters
-tf.app.flags.DEFINE_integer("max_question_length", 25, "Maximum question length.")
+tf.app.flags.DEFINE_integer("max_question_length", 31, "Maximum question length.")
 tf.app.flags.DEFINE_integer("max_paragraph_length", 400, "Maximum paragraph length and the output size of your model.")
 tf.app.flags.DEFINE_integer("batch_size", 32, "Batch size to use during training.")
 
@@ -88,6 +88,7 @@ tf.app.flags.DEFINE_string("vocab_path", os.path.join("..", "data", "squad", "vo
 tf.app.flags.DEFINE_string("embed_path", "", "Path to the trimmed GLoVe embedding (default: ../data/squad/glove.trimmed.{embedding_size}.npz)")
 
 FLAGS = tf.app.flags.FLAGS
+
 
 # TODO hyperparameter random search
 # TODO implement early stopping
@@ -130,7 +131,8 @@ def do_shell(model, dev, input_model = None):
         saver.restore(session, tf.train.latest_checkpoint(checkpoint_dir))
         print('HINT: Input as question "next" for next paragraph')
         while True:
-            original_question, paragraphs, question_lengths, paragraph_lengths, answers = dev.get_batch(1)
+            feed_dict_inputs = dev.get_batch(1)
+            original_question, paragraphs, question_lengths, paragraph_lengths, answers = feed_dict_inputs
             for i in itertools.count():
                 paragraph = reverse_indices(paragraphs[0], rev_vocab)
                 if not i:
@@ -152,9 +154,8 @@ def do_shell(model, dev, input_model = None):
 
                 if input_model:
                     #feed into siamese model instead
-                    question = feed_dict_inputs[0]
-                    question = input_model.run(question)
-                feed_dict = model.fill_feed_dict(questions, paragraphs, question_lengths, paragraph_lengths)
+                    question = to_siamese(input_model, feed_dict_inputs)[0]
+                feed_dict = model.fill_feed_dict(question, paragraphs, question_lengths, paragraph_lengths)
 
                 if False: #load_meta
                     start, end = session.run(['prediction/answer_start:0', 'prediction/answer_end:0'], feed_dict)
@@ -247,9 +248,7 @@ def multibatch_prediction_truth(session, model, data, num_batches=None, random=F
 
         if input_model:
             #feed into siamese model instead
-            question = feed_dict_inputs[0]
-            M = input_model.run(question)
-            feed_dict_inputs = (M,) + feed_dict_inputs[1:]
+            feed_dict_inputs = to_siamese(input_model, feed_dict_inputs)
         feed_dict = model.fill_feed_dict(*feed_dict_inputs)
         answer_start, answer_end = session.run(model.answer, feed_dict)
         # for i, s in enumerate(answer_start):
@@ -310,9 +309,7 @@ def do_train(model, train, dev, input_model = None):
             feed_dict_inputs = train.get_batch(FLAGS.batch_size, replace=False)
             if input_model:
                 #feed into siamese model instead
-                question = feed_dict_inputs[0]
-                M = input_model.run(question)
-                feed_dict_inputs = (M,) + feed_dict_inputs[1:]
+                feed_dict_inputs = to_siamese(input_model, feed_dict_inputs)
             feed_dict = model.fill_feed_dict(*feed_dict_inputs, is_training=True)
 
             if epoch != train.epoch:
@@ -342,13 +339,11 @@ def do_train(model, train, dev, input_model = None):
                 print(f'Step {step}, loss {mean_loss:.2f}')
 
             # Train/Dev Evaluation
-            if step != 0 and (step == 200 or step % 600 == 0):
+            if (step == 200 or step % 600 == 0):
                 feed_dict_inputs = dev.get_batch(FLAGS.batch_size)
                 if input_model:
                     #feed into siamese model instead
-                    question = feed_dict_inputs[0]
-                    M = input_model.run(question)
-                    feed_dict_inputs = (M,) + feed_dict_inputs[1:]
+                    feed_dict_inputs = to_siamese(input_model, feed_dict_inputs)
                 feed_dict = model.fill_feed_dict(*feed_dict_inputs)
                 fetch_dict = {'loss': model.loss}
                 dev_loss = sess.run(fetch_dict, feed_dict)['loss']
@@ -410,9 +405,7 @@ def test_overfit(model, train, input_model = None):
                 feed_dict_inputs = train.get_batch(FLAGS.batch_size, replace=False)
                 if input_model:
                     #feed into siamese model instead
-                    question = feed_dict_inputs[0]
-                    M = input_model.run(question)
-                    input_dict_inputs[0] = M
+                    feed_dict_inputs = to_siamese(input_model, feed_dict_inputs)
                 feed_dict = model.fill_feed_dict(*feed_dict_inputs)
 
                 fetch_dict = {
@@ -443,6 +436,19 @@ def pad_embeddings(matrix, max_len):
     else:
         to_pad = np.zeros((shape[0], max_len-seq_len, shape[2]))
         return np.concatenate((matrix, to_pad), axis = 1)
+
+def to_siamese(model, batch_inputs):
+    questions = batch_inputs[0]
+    question_lens = batch_inputs[2]
+    M, m = model.run(questions)
+
+    #append to end of sequences
+    batch_ind = np.arange(FLAGS.batch_size)
+    clipped_lens = np.clip(question_lens, None, FLAGS.max_question_length-1)
+    embedded = model.word_embedding_matrix[np.array(questions)]
+    embedded[batch_ind, clipped_lens] = m
+    batch_inputs[0] = embedded
+    return batch_inputs
 
 def main(_):
     """ Typical usage
@@ -549,9 +555,6 @@ class ImportGraph():
         output = self.sess.graph.get_operation_by_name('sentence_one/output')
 
         outputs = self.sess.run([self.M, H, output, self.sentence, self.is_train, self.sentence_len], feed_dict={self.sentence: embedded, self.is_train: False, self.sentence_len: sentence_len})
-        print(outputs[0])
-        print(outputs[1])
-        print(outputs[2])
         return outputs[0]
 
 class ImportModel():
@@ -564,7 +567,7 @@ class ImportModel():
             self.siamese_model = SiameseBiLSTM(config)
             self.siamese_model.build_graph()
 
-            self.M, _, _ = self.siamese_model.process_sentence(
+            self.M, _, self.m = self.siamese_model.process_sentence(
                         self.siamese_model.sentence_one,
                         self.siamese_model.sentence_len_one)
 
@@ -579,11 +582,17 @@ class ImportModel():
         sentence_len = np.sum(sentence_mask, axis = 1)
         embedded = self.word_embedding_matrix[question]
 
-        M = self.sess.run(self.M, feed_dict={self.siamese_model.sentence_one: embedded,
+        M, m = self.sess.run([self.M, self.m], feed_dict={self.siamese_model.sentence_one: embedded,
                                            self.siamese_model.sentence_len_one: sentence_len,
                                            self.siamese_model.is_train: False})
 
-        return pad_embeddings(M, FLAGS.max_question_length)
+        return pad_embeddings(M, FLAGS.max_question_length), m
 
 if __name__ == "__main__":
-    tf.app.run()
+    try:
+        tf.app.run()
+    except:
+        print("\n\n\n\ndid you run python setup.py develop?\n\n\n")
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback,
+                              limit=2, file=sys.stdout)
