@@ -23,7 +23,6 @@ class DCN:
     def __init__(self, pretrained_embeddings, hparams, siamese_output_dim = None):
         self.hparams = copy.copy(hparams)
         self.pretrained_embeddings = pretrained_embeddings
-
         # Setup placeholders
         self.question = tf.placeholder(tf.float32, (None, None, hparams['embedding_size']), name='question')
         self.question_length = tf.placeholder(tf.int32, (None,), name='question_length')
@@ -55,6 +54,8 @@ class DCN:
 
 
             p_embeddings = tf.nn.embedding_lookup(embedded_vocab, self.paragraph)
+            p_embeddings = tf.concat((p_embeddings, tf.zeros_like(p_embeddings)), axis = 2)
+            #print('P_emb', p_embeddings)
         
         # Character embeddings to word vectors
         if hparams['use_char_cnn']:

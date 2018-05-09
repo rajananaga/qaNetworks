@@ -166,8 +166,11 @@ def dcnplus_encode(cell_factory, final_cell_factory, query, query_length, docume
     """
 
     with tf.variable_scope('initial_encoder'):
-        initial = cell_factory()
-        query_encoding, document_encoding = query_document_encoder(initial, query, query_length, document, document_length)
+        with tf.variable_scope('cell1'):
+            initial = cell_factory()
+        with tf.variable_scope('cell2'):
+            initial2 = cell_factory()
+        query_encoding, document_encoding = query_document_encoder(initial, initial2, query, query_length, document, document_length)
         #query_encoding = tf.nn.dropout(query_encoding, keep_prob)
         query_encoding = tf.layers.dense(
             query_encoding, 
@@ -180,8 +183,11 @@ def dcnplus_encode(cell_factory, final_cell_factory, query, query_length, docume
         summary_q_1, summary_d_1, coattention_d_1 = coattention(query_encoding, query_length, document_encoding, document_length, sentinel=True)
     
     with tf.variable_scope('summary_encoder'):
-        summary = cell_factory()
-        summary_q_encoding, summary_d_encoding = query_document_encoder(summary, summary_q_1, query_length, summary_d_1, document_length)
+        with tf.variable_scope('sum_cell1'):
+            summary = cell_factory()
+        with tf.variable_scope('sum_cell2'):
+            summary2 = cell_factory()
+        summary_q_encoding, summary_d_encoding = query_document_encoder(summary, summary2, summary_q_1, query_length, summary_d_1, document_length)
     
     with tf.variable_scope('coattention_2'):
         _, summary_d_2, coattention_d_2 = coattention(summary_q_encoding, query_length, summary_d_encoding, document_length)
@@ -209,7 +215,7 @@ def dcnplus_encode(cell_factory, final_cell_factory, query, query_length, docume
     return encoding
 
 
-def query_document_encoder(cell, query, query_length, document, document_length, bidirectional=True):
+def query_document_encoder(cell, cell2, query, query_length, document, document_length, bidirectional=True):
     """ DCN+ Query Document Encoder layer.
     
     Forward and backward cells are shared between the bidirectional query and document encoders.  
@@ -233,16 +239,18 @@ def query_document_encoder(cell, query, query_length, document, document_length,
             cell_bw = cell,
             dtype = tf.float32,
             inputs = query,
-            sequence_length = query_length
+            sequence_length = query_length,
+            scope = 'birnn1'
         )
         query_encoding = convert_gradient_to_tensor(tf.concat(query_fw_bw_encodings, 2))
 
         document_fw_bw_encodings, _ = tf.nn.bidirectional_dynamic_rnn(
-            cell_fw = cell,
-            cell_bw = cell,
+            cell_fw = cell2,
+            cell_bw = cell2,
             dtype = tf.float32,
             inputs = document,
-            sequence_length = document_length
+            sequence_length = document_length,
+            scope = 'birnn2'
         )    
         document_encoding = convert_gradient_to_tensor(tf.concat(document_fw_bw_encodings, 2))
     else:
@@ -250,14 +258,16 @@ def query_document_encoder(cell, query, query_length, document, document_length,
             cell = cell,
             dtype = tf.float32,
             inputs = query,
-            sequence_length = query_length
+            sequence_length = query_length,
+            scope = 'birnn1'
         )
 
         document_encoding, _ = tf.nn.dynamic_rnn(
-            cell = cell,
+            cell = cell2,
             dtype = tf.float32,
             inputs = document,
-            sequence_length = document_length
+            sequence_length = document_length,
+            scope = 'birnn2'
         )
     return query_encoding, document_encoding
 

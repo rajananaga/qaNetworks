@@ -17,6 +17,7 @@ from utils import initialize_vocab, get_normalized_train_dir, f1, get_data_paths
 from preprocessing.qa_data import UNK_ID, PAD_ID
 from networks.dcn_model import DCN
 from dataset import SquadDataset, pad_sequence
+import traceback
 
 import sys
 # sys.path.append('../../paraphrase-id-tensorflow-master')
@@ -432,21 +433,34 @@ def pad_embeddings(matrix, max_len):
     shape = matrix.shape
     seq_len = shape[1]
     if seq_len>max_len:
-        return matrix[:, :seq_len]
+        return matrix[:, :max_len]
     else:
         to_pad = np.zeros((shape[0], max_len-seq_len, shape[2]))
         return np.concatenate((matrix, to_pad), axis = 1)
 
-def to_siamese(model, batch_inputs):
+def to_siamese(model, batch_inputs, append_toggle = False):
     questions = batch_inputs[0]
     question_lens = batch_inputs[2]
     M, m = model.run(questions)
 
-    #append to end of sequences
-    batch_ind = np.arange(FLAGS.batch_size)
-    clipped_lens = np.clip(question_lens, None, FLAGS.max_question_length-1)
+    #print("FEIWUHDS", M.shape, m.shape)
+
     embedded = model.word_embedding_matrix[np.array(questions)]
-    embedded[batch_ind, clipped_lens] = m
+
+    if append_toggle:
+        #append to end of sequences
+        batch_ind = np.arange(FLAGS.batch_size)
+        clipped_lens = np.clip(question_lens, None, FLAGS.max_question_length-1)
+        embedded[batch_ind, clipped_lens] = m
+    else:
+        #question, paragraphs, question_lengths, paragraph_lengths, answers = batch_inputs
+        #print(question, paragraphs)
+        #print("BITCH1: ", embedded.shape)
+        M = pad_embeddings(M, embedded.shape[1])
+        #print("BITCH2: ", M.shape)
+        embedded = np.concatenate((embedded, M), axis = 2)
+        #print(embedded.shape)
+
     batch_inputs[0] = embedded
     return batch_inputs
 
@@ -498,7 +512,8 @@ def main(_):
 
     # Build model
     if FLAGS.model in ('baseline', 'mixed', 'dcnplus', 'dcn'):
-        # with tf.variable_scope('dcn'):
+        # print(FLAGS.__flags)
+        FLAGS.embedding_size = 2*FLAGS.embedding_size #double embedding size for concated vectors
         model = DCN(embeddings, FLAGS.__flags, siamese_output_dim = siamese_config['rnn_hidden_size'])
     elif FLAGS.model == 'cat':
         from networks.cat import Graph
@@ -589,10 +604,11 @@ class ImportModel():
         return pad_embeddings(M, FLAGS.max_question_length), m
 
 if __name__ == "__main__":
-    try:
+    # try:
+    if True:
         tf.app.run()
-    except:
-        print("\n\n\n\ndid you run python setup.py develop?\n\n\n")
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        traceback.print_exception(exc_type, exc_value, exc_traceback,
-                              limit=2, file=sys.stdout)
+    # except:
+    #     print("\n\n\n\ndid you run python setup.py develop?\n\n\n")
+    #     exc_type, exc_value, exc_traceback = sys.exc_info()
+    #     traceback.print_exception(exc_type, exc_value, exc_traceback,
+    #                           limit=2, file=sys.stdout)
