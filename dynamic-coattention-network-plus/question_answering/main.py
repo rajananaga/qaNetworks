@@ -438,10 +438,10 @@ def pad_embeddings(matrix, max_len):
         to_pad = np.zeros((shape[0], max_len-seq_len, shape[2]))
         return np.concatenate((matrix, to_pad), axis = 1)
 
-def to_siamese(model, batch_inputs, append_toggle = False):
+def to_siamese(model, batch_inputs, append_toggle = True):
     questions = batch_inputs[0]
     question_lens = batch_inputs[2]
-    M, m = model.run(questions)
+    M, m, A, a = model.run(questions)
 
     #print("FEIWUHDS", M.shape, m.shape)
 
@@ -504,6 +504,7 @@ def main(_):
         with open(siamese_config, 'r') as f:
             siamese_config = json.load(f)
             siamese_config['mode'] = 'test'
+            siamese_config['input_sequence_length'] = FLAGS.max_question_length
 
         checkpoint_dir = '../../paraphrase-id-tensorflow-master/models/baseline_siamese/{}/'.format(FLAGS.siamese_model_num)
         # siamese_graph = ImportGraph(checkpoint_dir, embeddings)
@@ -513,7 +514,7 @@ def main(_):
     # Build model
     if FLAGS.model in ('baseline', 'mixed', 'dcnplus', 'dcn'):
         # print(FLAGS.__flags)
-        FLAGS.embedding_size = 2*FLAGS.embedding_size #double embedding size for concated vectors
+        # FLAGS.embedding_size = 2*FLAGS.embedding_size #double embedding size for concated vectors
         model = DCN(embeddings, FLAGS.__flags, siamese_output_dim = siamese_config['rnn_hidden_size'])
     elif FLAGS.model == 'cat':
         from networks.cat import Graph
@@ -582,7 +583,7 @@ class ImportModel():
             self.siamese_model = SiameseBiLSTM(config)
             self.siamese_model.build_graph()
 
-            self.M, _, self.m = self.siamese_model.process_sentence(
+            self.M, self.A, self.m, self.a = self.siamese_model.process_sentence(
                         self.siamese_model.sentence_one,
                         self.siamese_model.sentence_len_one)
 
@@ -597,11 +598,11 @@ class ImportModel():
         sentence_len = np.sum(sentence_mask, axis = 1)
         embedded = self.word_embedding_matrix[question]
 
-        M, m = self.sess.run([self.M, self.m], feed_dict={self.siamese_model.sentence_one: embedded,
+        M, m, A, a = self.sess.run([self.M, self.m, self.A, self.a], feed_dict={self.siamese_model.sentence_one: embedded,
                                            self.siamese_model.sentence_len_one: sentence_len,
                                            self.siamese_model.is_train: False})
 
-        return pad_embeddings(M, FLAGS.max_question_length), m
+        return pad_embeddings(M, FLAGS.max_question_length), m, A, a
 
 if __name__ == "__main__":
     # try:

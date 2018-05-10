@@ -16,16 +16,18 @@ class SquadDataset:
         self.epoch_sampled = 0
         self.epoch = 1
 
-    def get_batch(self, batch_size, replace=True):
+    def get_batch(self, batch_size, replace=True, shuffle = True):
         if replace:
             batch_idx = np.random.choice(self.length, batch_size, replace)
             return self[batch_idx]
 
         if self.epoch_sampled == 0 and self.epoch == 1:
-            self.shuffle()
+            if shuffle:
+                self.shuffle()
 
         if self.epoch_sampled == self.length:
-            self.shuffle()
+            if shuffle:
+                self.shuffle()
             self.epoch_sampled = 0
             self.epoch += 1
         
@@ -33,7 +35,8 @@ class SquadDataset:
         if self.epoch_sampled + batch_size > self.length:
             tail_batch = self[self.epoch_sampled:]
             batch_size -= len(tail_batch[0])
-            self.shuffle()
+            if shuffle:
+                self.shuffle()
             self.epoch_sampled = 0
             self.epoch += 1
         

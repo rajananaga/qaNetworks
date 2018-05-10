@@ -31,7 +31,7 @@ def main():
                                  "If you pick \"predict\", then you must also "
                                  "supply the path to a pretrained model and "
                                  "DataIndexer to load."))
-    argparser.add_argument("--model_load_dir", type=str,
+    argparser.add_argument("--model_load_dir", type=str, default = os.path.join(project_dir,"models/baseline_siamese/"),
                            help=("The path to a directory with checkpoints to "
                                  "load for evaluation or prediction. The "
                                  "latest checkpoint will be loaded."))
@@ -133,6 +133,7 @@ def main():
     run_id = config.run_id
     mode = config.mode
 
+    config.model_load_dir = config.model_load_dir + run_id
 
     # Get the data.
     batch_size = config.batch_size
@@ -150,6 +151,7 @@ def main():
             [config.val_file], max_lengths={"num_sentence_words": num_sentence_words})
     else:
         # Load the fitted DataManager, and use it to index the test data
+        config.dataindexer_load_path = config.model_load_dir + "/baseline_siamese-"+ config.run_id + "-DataManager.pkl"
         logger.info("Loading pickled DataManager "
                     "from {}".format(config.dataindexer_load_path))
         data_manager = pickle.load(open(config.dataindexer_load_path, "rb"))

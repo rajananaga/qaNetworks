@@ -90,6 +90,10 @@ class SiameseBiLSTM(BaseTFModel):
         self.output_keep_prob = config_dict.pop("output_keep_prob")
 
         self.num_sentence_words = config_dict.pop("num_sentence_words")
+        if "input_sequence_length" not in config_dict.keys():
+            config_dict['input_sequence_length'] = self.num_sentence_words
+        self.input_sequence_length = config_dict.pop("input_sequence_length")
+        
         self.att_dim = self.rnn_hidden_size#config_dict.pop("att_dim")
 
         trainable = self.mode == 'train'
@@ -206,6 +210,9 @@ class SiameseBiLSTM(BaseTFModel):
         # H1.shape = (?, ?, 512)
 
         A = self.multi_attention(H)
+        att_mask = tf.sequence_mask(sentence_len, maxlen=self.input_sequence_length, dtype=tf.float32)
+        A = tf.multiply(tf.expand_dims(att_mask, axis = 1), A)
+        A = tf.divide(A, tf.reduce_sum(A, axis=2, keep_dims=True) + 1e-6)
         # (batch, r, T) *  (batch, T, d) = (batch, r, d)
 
         #(?, r, 512)
@@ -215,12 +222,15 @@ class SiameseBiLSTM(BaseTFModel):
         # ADD POSITIONAL ENCODING?
 
         ######  Summary Vector Calc ######
-        # a1 = (?, r)
+        # a1 = (?, 1, r)
         a = self.reg_attention(M)
+        att_mask = tf.sequence_mask(sentence_len, maxlen=self.num_sentence_words, dtype=tf.float32)
+        a = tf.multiply(tf.expand_dims(att_mask, axis = 1), a)
+        a = tf.divide(a, tf.reduce_sum(a, axis=2, keep_dims=True) + 1e-6)
 
         #(?, r)*(?, r, 512)
         encoded_sentence = tf.squeeze(tf.matmul(a, M), axis = 1, name = scope_name + '/' + 'output')
-        return M, A, encoded_sentence
+        return M, A, encoded_sentence, a
 
     @overrides
     def _build_forward(self):
@@ -233,8 +243,8 @@ class SiameseBiLSTM(BaseTFModel):
         #     embedded_sentence_one = tf.nn.embedding_lookup( self.word_emb_mat, self.sentence_one)
         #     embedded_sentence_two = tf.nn.embedding_lookup( self.word_emb_mat, self.sentence_two)
 
-        M1, A1, encoded_sentence_one = self.process_sentence(self.sentence_one, self.sentence_len_one, scope_name = 'sentence_one')
-        M2, A2, encoded_sentence_two = self.process_sentence(self.sentence_two, self.sentence_len_two, scope_name = 'sentence_two')
+        M1, A1, encoded_sentence_one, a1 = self.process_sentence(self.sentence_one, self.sentence_len_one, scope_name = 'sentence_one')
+        M2, A2, encoded_sentence_two, a2 = self.process_sentence(self.sentence_two, self.sentence_len_two, scope_name = 'sentence_two')
 
         with tf.name_scope("loss"):
             # Use the exponential of the negative L1 distance
