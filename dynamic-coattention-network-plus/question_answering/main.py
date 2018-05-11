@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Mode
 tf.app.flags.DEFINE_string('mode', 'train', 'Mode to use, train/eval/shell/overfit')
-tf.app.flags.DEFINE_string('siamese_model_num', '01', 'Path to config log for siamese network')
+tf.app.flags.DEFINE_string('siamese_model_num', '04', 'Path to config log for siamese network')
 tf.app.flags.DEFINE_string('use_siamese', True, 'Path to config log for siamese network')
 tf.app.flags.DEFINE_string('initialize_siamese_to_dcn', True, 'Set this to False if you\'re initializing from a baseline DCN')
 
@@ -70,7 +70,7 @@ tf.app.flags.DEFINE_integer("char_embedding_size", 8, "Size of character embeddi
 tf.app.flags.DEFINE_integer("max_word_length", 15, "Maximum number of characters per word.")
 
 # Data hyperparameters
-tf.app.flags.DEFINE_integer("max_question_length", 31, "Maximum question length.")
+tf.app.flags.DEFINE_integer("max_question_length", 40, "Maximum question length.")
 tf.app.flags.DEFINE_integer("max_paragraph_length", 400, "Maximum paragraph length and the output size of your model.")
 tf.app.flags.DEFINE_integer("batch_size", 32, "Batch size to use during training.")
 
@@ -585,7 +585,7 @@ class ImportModel():
 
             self.M, self.A, self.m, self.a = self.siamese_model.process_sentence(
                         self.siamese_model.sentence_one,
-                        self.siamese_model.sentence_len_one)
+                        self.siamese_model.sentence_len_one, scope_name = 'sentence_one')
 
             latest_ckpt = tf.train.latest_checkpoint(loc)
             saver = tf.train.Saver()

@@ -9,6 +9,7 @@ from ..base_tf_model import BaseTFModel
 from ...util.switchable_dropout_wrapper import SwitchableDropoutWrapper
 from ...util.pooling import mean_pool
 from ...util.rnn import last_relevant_output
+from tensorflow.contrib.layers import layer_norm
 
 import numpy as np
 
@@ -181,6 +182,46 @@ class SiameseBiLSTM(BaseTFModel):
         # A boolean that encodes whether we are training or evaluating
         self.is_train = tf.placeholder('bool', [], name='is_train')
 
+    def positional_encoding(self, dim, sentence_length, dtype=tf.float32):
+        encoded_vec = np.array([pos/np.power(10000, 2*i/dim) for pos in range(sentence_length) for i in range(dim)])
+        encoded_vec[::2] = np.sin(encoded_vec[::2])
+        encoded_vec[1::2] = np.cos(encoded_vec[1::2])
+
+        return tf.convert_to_tensor(encoded_vec.reshape([sentence_length, dim]), dtype=dtype)
+    
+    def add_positional_embedding_nd(self, x, max_length, name):
+        """Add n-dimensional positional embedding.
+        Adds embeddings to represent the positional dimensions of the tensor.
+        The input tensor has n positional dimensions - i.e. 1 for text, 2 for images,
+        3 for video, etc.
+        Args:
+        x: a Tensor with shape [batch, p1 ... pn, depth]
+        max_length: an integer.  static maximum size of any dimension.
+        name: a name for this layer.
+        Returns:
+        a Tensor the same shape as x.
+        """
+        static_shape = x.get_shape().as_list()
+        dynamic_shape = tf.shape(x)
+        num_dims = len(static_shape) - 2
+        depth = static_shape[-1]
+        base_shape = [1] * (num_dims + 1) + [depth]
+        base_start = [0] * (num_dims + 2)
+        base_size = [-1] + [1] * num_dims + [depth]
+        with tf.variable_scope(name, reuse=tf.AUTO_REUSE):
+            for i in range(num_dims):
+                shape = base_shape[:]
+                start = base_start[:]
+                size = base_size[:]
+                shape[i + 1] = max_length
+                size[i + 1] = dynamic_shape[i + 1]
+                var = (tf.get_variable(
+                    'pos' + "_%d" % i, shape,
+                    initializer=tf.random_normal_initializer(0, depth ** -0.5))
+                       * (depth ** 0.5))
+                x += tf.slice(var, start, size)
+        return x
+
     def process_sentence(self, word_embedded_sentence, sentence_len, scope_name = 'scope'):
 
         # sentence_mask = tf.sign(sentence, name="sentence_masking")
@@ -209,24 +250,37 @@ class SiameseBiLSTM(BaseTFModel):
         H = tf.concat([fw_output, bw_output], -1, name = scope_name + '/' + 'H')
         # H1.shape = (?, ?, 512)
 
+        ###### ADD POSITIONAL ENCODING? ######
+        #pos = self.positional_encoding(2*self.rnn_hidden_size, self.input_sequence_length)
+        H = self.add_positional_embedding_nd(H, self.input_sequence_length, name = scope_name + '/pos_encode')
+        #H = H + tf.expand_dims(pos, axis = 0)
+
+
+        ###### Self Attention ######
         A = self.multi_attention(H)
         att_mask = tf.sequence_mask(sentence_len, maxlen=self.input_sequence_length, dtype=tf.float32)
-        A = tf.multiply(tf.expand_dims(att_mask, axis = 1), A)
-        A = tf.divide(A, tf.reduce_sum(A, axis=2, keep_dims=True) + 1e-6)
+        A = tf.multiply(tf.expand_dims(att_mask, axis = 1), A + 1e-9) 
+        A = tf.divide(A, tf.reduce_sum(A, axis=2, keep_dims=True)) 
         # (batch, r, T) *  (batch, T, d) = (batch, r, d)
 
         #(?, r, 512)
         M = tf.matmul(A, H)
+        ### Residual Connection ###
+        M = M + H
+        M = layer_norm(M, reuse = tf.AUTO_REUSE, scope='layer_normalization')
+
+        # 2u to u
         M = tf.tensordot(M, self.twoU2U, axes = [[2],[0]], name = scope_name + '/' + 'M')
 
-        # ADD POSITIONAL ENCODING?
+        ###### ADD POSITIONAL ENCODING? ######
+
 
         ######  Summary Vector Calc ######
         # a1 = (?, 1, r)
         a = self.reg_attention(M)
         att_mask = tf.sequence_mask(sentence_len, maxlen=self.num_sentence_words, dtype=tf.float32)
-        a = tf.multiply(tf.expand_dims(att_mask, axis = 1), a)
-        a = tf.divide(a, tf.reduce_sum(a, axis=2, keep_dims=True) + 1e-6)
+        a = tf.multiply(tf.expand_dims(att_mask, axis = 1), a + 1e-9)  
+        a = tf.divide(a, tf.reduce_sum(a, axis=2, keep_dims=True))
 
         #(?, r)*(?, r, 512)
         encoded_sentence = tf.squeeze(tf.matmul(a, M), axis = 1, name = scope_name + '/' + 'output')
