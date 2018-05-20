@@ -1,4 +1,7 @@
 data/
+graphs/
+DCN_DEV_F1.csv
+run_.-tag-F1_DEV.csv
 .env
 
 # exclude folders/files named data, models or logs in the
